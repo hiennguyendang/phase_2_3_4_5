@@ -1,0 +1,6 @@
+.venv/
+docs/
+data/
+CLAUDE.md
+download_data.py
+
