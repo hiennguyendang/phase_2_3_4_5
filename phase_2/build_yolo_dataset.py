@@ -46,6 +46,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=None, help="process only first N rows (debug)")
     p.add_argument("--keep-empty", action="store_true",
                    help="also write images whose scene graph yields 0 boxes")
+    p.add_argument("--labels-only", action="store_true",
+                   help="write only labels/ + dataset.yaml, NOT the image links. Build this LOCALLY "
+                        "and upload it; on Kaggle run link_yolo_images.py to add the image symlinks.")
+    p.add_argument("--fixed-size", type=int, default=None,
+                   help="assume every image is this square size (e.g. 448 for center-cropped) instead "
+                        "of opening each image for W/H. With --labels-only this needs NO local images "
+                        "at all — just scene graphs + metadata.")
     return p.parse_args()
 
 
@@ -105,22 +112,27 @@ def write_dataset_yaml(out: Path) -> None:
 
 def main() -> int:
     args = parse_args()
-    images_root = autodetect(args.images_root, "image")
+    # with --labels-only --fixed-size we never touch images -> don't require/index them
+    need_images = not (args.labels_only and args.fixed_size)
+    images_root = autodetect(args.images_root, "image") if need_images else args.images_root
     scene_root = autodetect(args.scene_root, "scene")
 
     print(f"metadata    : {args.metadata}")
-    print(f"images-root : {images_root}")
+    print(f"images-root : {images_root if need_images else '(skipped: fixed-size labels-only)'}")
     print(f"scene-root  : {scene_root}")
     print(f"out         : {args.out}")
-    for label, path in (("metadata", args.metadata), ("images-root", images_root),
-                        ("scene-root", scene_root)):
+    checks = [("metadata", args.metadata), ("scene-root", scene_root)]
+    if need_images:
+        checks.append(("images-root", images_root))
+    for label, path in checks:
         if not path.exists():
             raise SystemExit(f"[ERROR] {label} not found: {path}")
 
-    print("Indexing images + scene graphs (one-time walk)...")
-    img_index = index_images(images_root)
+    print("Indexing scene graphs (one-time walk)...")
+    img_index = index_images(images_root) if need_images else {}
     scene_index = index_scene_graphs(scene_root)
-    print(f"  images indexed       : {len(img_index):,}")
+    if need_images:
+        print(f"  images indexed       : {len(img_index):,}")
     print(f"  scene graphs indexed : {len(scene_index):,}")
 
     import json
@@ -144,8 +156,8 @@ def main() -> int:
             unmapped_split += 1
             continue
 
-        img_path = img_index.get(image_id)
-        if img_path is None:
+        img_path = img_index.get(image_id) if need_images else None
+        if need_images and img_path is None:
             no_image += 1
             continue
 
@@ -162,12 +174,15 @@ def main() -> int:
             no_scene += 1
             continue
 
-        try:
-            with Image.open(img_path) as im:
-                img_w, img_h = im.size
-        except Exception:
-            no_image += 1
-            continue
+        if args.fixed_size:
+            img_w = img_h = args.fixed_size
+        else:
+            try:
+                with Image.open(img_path) as im:
+                    img_w, img_h = im.size
+            except Exception:
+                no_image += 1
+                continue
 
         try:
             scene = json.loads(scene_path.read_text(encoding="utf-8"))
@@ -184,8 +199,9 @@ def main() -> int:
         label_path = args.out / "labels" / split / f"{image_id}.txt"
         label_path.parent.mkdir(parents=True, exist_ok=True)
         label_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-        link_file(img_path, args.out / "images" / split / f"{image_id}{img_path.suffix}",
-                  args.link_mode)
+        if not args.labels_only:
+            link_file(img_path, args.out / "images" / split / f"{image_id}{img_path.suffix}",
+                      args.link_mode)
         per_split[split] += 1
 
         if seen % 5000 == 0:
@@ -207,6 +223,9 @@ def main() -> int:
     print(f"  degenerate        : {total_stats.dropped_degenerate:,}")
     print(f"  out-of-bounds     : {total_stats.dropped_out_of_bounds:,}  (clipped {total_stats.clipped:,})")
     print(f"dataset.yaml        : {args.out / 'dataset.yaml'}")
+    if args.labels_only:
+        print("\n[labels-only] no image links written. Upload this folder as a Kaggle dataset, then on\n"
+              "Kaggle run:  python link_yolo_images.py --labels-dir <ds> --images-root <imgs> --out yolo_ds")
     return 0
 
 

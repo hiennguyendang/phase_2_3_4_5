@@ -53,17 +53,32 @@ LLM:       scene graphs → vocab + SFT data → QLoRA Qwen → pseudo scene gra
 Images and bboxes must already be resized/scaled together — the converter
 normalizes boxes by the **actual image width/height** (read with PIL).
 
-## Run on Kaggle (GPU)
+## Recommended flow: build labels LOCALLY, link on Kaggle
+
+The slow step (open every image for W/H + convert boxes) only needs the scene graphs + metadata —
+do it **once locally** and upload a small `labels/` dataset, so Kaggle never re-builds (and you don't
+upload the 11 GB scene-graph tree or the metadata there). The notebook `phase2_kaggle_train.ipynb`
+already follows this. Because the images are center-cropped to a square, `--fixed-size 448` skips
+PIL entirely — **you don't even need the images locally**, just scene graphs + metadata.
+
+```bash
+# LOCAL (no GPU, no images needed): scene graphs + metadata -> labels/ + dataset.yaml
+python build_yolo_dataset.py --labels-only --fixed-size 448 \
+  --metadata data/mimic_metadata_final.jsonl \
+  --scene-root <chest-imagenome> --out yolo_labels
+# -> upload the `yolo_labels/` folder as a Kaggle dataset named `yolo-labels`
+
+# KAGGLE (in the notebook): just symlink the matching images (fast, no PIL)
+python link_yolo_images.py --labels-dir /kaggle/input/yolo-labels \
+  --images-root /kaggle/input/<images> --out /kaggle/working/yolo_ds
+```
+
+> Fallback (build entirely on Kaggle, slower): `python build_yolo_dataset.py --images-root ... \
+> --scene-root ... --metadata ... --out /kaggle/working/yolo_ds` (opens every image for W/H).
+
+## Train on Kaggle (GPU)
 ```bash
 pip install -q ultralytics
-
-# 0) point config.py KAGGLE_* paths at your dataset slugs, OR pass flags below.
-#    (build_yolo_dataset.py also auto-detects roots under /kaggle/input.)
-python build_yolo_dataset.py \
-  --metadata   /kaggle/input/<meta>/mimic_metadata_final.jsonl \
-  --images-root /kaggle/input/<images> \
-  --scene-root  /kaggle/input/<scene> \
-  --link-mode symlink
 
 # (recommended) eyeball alignment before training
 python visualize.py --split val --n 12     # check /kaggle/working/viz
