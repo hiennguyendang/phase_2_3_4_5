@@ -1,7 +1,7 @@
-"""Metrics for M3: image-level CheXpert AUC (macro), region + concept AUC.
+"""Metrics for M3: macro-F1 (headline, spec 3.6) + AUC, for image / region / concept.
 
-AUC is computed with a dependency-free rank formula (ignores the -100 sentinel),
-so no sklearn needed.
+Both are computed dependency-free (ignore the -100 sentinel), so no sklearn needed.
+F1 is the metric that drives checkpoint selection; AUC is reported alongside.
 """
 
 from __future__ import annotations
@@ -38,6 +38,25 @@ def _auc_table(prob: np.ndarray, tgt: np.ndarray, names: list[str]) -> tuple[flo
     return macro, aucs
 
 
+def _f1_table(prob: np.ndarray, tgt: np.ndarray, names: list[str],
+              thr: float = 0.5) -> tuple[float, dict]:
+    """Binary F1 per class at a fixed threshold (ignores -100). Macro = mean over classes."""
+    f1s = {}
+    for c in range(prob.shape[-1]):
+        m = (tgt[..., c] == 0) | (tgt[..., c] == 1)
+        if not m.any():
+            f1s[names[c]] = float("nan"); continue
+        p = (prob[..., c][m] >= thr).astype(np.int64)
+        t = tgt[..., c][m].astype(np.int64)
+        tp = int(((p == 1) & (t == 1)).sum())
+        fp = int(((p == 1) & (t == 0)).sum())
+        fn = int(((p == 0) & (t == 1)).sum())
+        denom = 2 * tp + fp + fn
+        f1s[names[c]] = (2.0 * tp / denom) if denom > 0 else float("nan")
+    macro = float(np.nanmean(list(f1s.values())))
+    return macro, f1s
+
+
 @torch.no_grad()
 def evaluate(model, loader, device) -> dict:
     model.eval()
@@ -45,7 +64,8 @@ def evaluate(model, loader, device) -> dict:
     rd_p, rd_t, rd_m = [], [], []
     cc_p, cc_t, cc_m = [], [], []
     for b in loader:
-        out = model(b["grid"].to(device), b["global"].to(device), b["present_mask"].to(device))
+        out = model(b["grid"].to(device), b["global"].to(device),
+                    b["present_mask"].to(device), b["boxes"].to(device))
         img_p.append(torch.sigmoid(out["image_disease_logits"]).cpu().numpy())
         img_t.append(b["image_chexpert"].numpy())
         rd_p.append(torch.sigmoid(out["region_disease_logits"]).cpu().numpy())
@@ -59,15 +79,18 @@ def evaluate(model, loader, device) -> dict:
     res = {}
     P, T = np.concatenate(img_p), np.concatenate(img_t)
     res["image_auc_macro"], res["image_per_class"] = _auc_table(P, T, C.CHEX_NAMES)
+    res["image_f1_macro"], res["image_f1_per_class"] = _f1_table(P, T, C.CHEX_NAMES)
 
     rp, rt, rm = np.concatenate(rd_p), np.concatenate(rd_t), np.concatenate(rd_m).astype(bool)
     rp, rt = rp[rm], rt[rm]                      # [n_present, 14]
     res["region_auc_macro"], _ = _auc_table(rp, rt, C.CHEX_NAMES)
+    res["region_f1_macro"], _ = _f1_table(rp, rt, C.CHEX_NAMES)
 
     if cc_p:
         cp, ct, cm = np.concatenate(cc_p), np.concatenate(cc_t), np.concatenate(cc_m).astype(bool)
         cp, ct = cp[cm], ct[cm]                  # [n_present, 69]
         res["concept_auc_macro"], _ = _auc_table(cp, ct, C.CONCEPT_NAMES)
+        res["concept_f1_macro"], _ = _f1_table(cp, ct, C.CONCEPT_NAMES)
     return res
 
 
@@ -92,11 +115,13 @@ def main() -> int:
     m = M.build_model(ck["feat_dim"], ck["mode"]).to(args.device)
     m.load_state_dict(ck["model"])
     res = evaluate(m, loader, args.device)
-    print(f"[{args.split}] image AUC macro = {res['image_auc_macro']:.4f} | "
-          f"region {res['region_auc_macro']:.4f}"
-          + (f" | concept {res.get('concept_auc_macro', float('nan')):.4f}" if "concept_auc_macro" in res else ""))
-    for c, a in res["image_per_class"].items():
-        print(f"  {c:<26} {a:.4f}")
+    print(f"[{args.split}] image  F1 macro = {res['image_f1_macro']:.4f}  AUC macro = {res['image_auc_macro']:.4f}")
+    print(f"          region F1 {res['region_f1_macro']:.4f}  AUC {res['region_auc_macro']:.4f}"
+          + (f"  | concept F1 {res.get('concept_f1_macro', float('nan')):.4f}"
+             f"  AUC {res.get('concept_auc_macro', float('nan')):.4f}" if "concept_auc_macro" in res else ""))
+    print(f"  {'class':<26} {'F1':>7} {'AUC':>7}")
+    for c in res["image_per_class"]:
+        print(f"  {c:<26} {res['image_f1_per_class'][c]:>7.4f} {res['image_per_class'][c]:>7.4f}")
     return 0
 
 

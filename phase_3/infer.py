@@ -31,6 +31,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--split", default="test")
     p.add_argument("--out", type=Path, default=config.WORK_ROOT / "m3_pred.jsonl")
     p.add_argument("--topk-concepts", type=int, default=8)
+    p.add_argument("--topk-cells", type=int, default=0,
+                   help="dump top-k attention-pool grid cells per region (M5 'where'); 0 = off")
     p.add_argument("--batch", type=int, default=config.BATCH)
     p.add_argument("--device", default="cuda")
     return p.parse_args()
@@ -53,11 +55,12 @@ def main() -> int:
     with open(args.out, "w", encoding="utf-8") as f:
         for b in loader:
             out = m(b["grid"].to(args.device), b["global"].to(args.device),
-                    b["present_mask"].to(args.device))
+                    b["present_mask"].to(args.device), b["boxes"].to(args.device))
             img = torch.sigmoid(out["image_disease_logits"]).cpu()
             rd = torch.sigmoid(out["region_disease_logits"]).cpu()
             cc = (torch.sigmoid(out["concept_logits"]).cpu()
                   if out["concept_logits"] is not None else None)
+            attn = out["region_attn"].cpu() if args.topk_cells else None  # [B,29,196]
             mask = b["present_mask"]
             for j, iid in enumerate(b["image_id"]):
                 rec = {
@@ -74,6 +77,10 @@ def main() -> int:
                         top = torch.topk(cc[j, r], args.topk_concepts)
                         entry["concepts"] = {C.CONCEPT_NAMES[int(i)]: round(float(p), 3)
                                              for p, i in zip(top.values, top.indices) if p > 0.5}
+                    if attn is not None:                 # faithful "where" cells -> (row, col, weight)
+                        tc = torch.topk(attn[j, r], args.topk_cells)
+                        entry["cells"] = [[int(i) // config.GRID_W, int(i) % config.GRID_W, round(float(w), 3)]
+                                          for w, i in zip(tc.values, tc.indices)]
                     rec["regions"][C.REGION_NAMES[r]] = entry
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 written += 1

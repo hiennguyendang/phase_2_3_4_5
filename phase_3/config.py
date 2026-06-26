@@ -38,23 +38,44 @@ GRID_H = 14
 GRID_W = 14
 GRID_TOKENS = GRID_H * GRID_W   # 196
 FEAT_DIM = 512                  # BioViL-T channel dim
+INPUT_RES = 448                 # BioViL-T center-crop side; boxes (labels.py) live in this space.
+                                # cell = INPUT_RES / GRID_W = 32 px  -> maps a bbox to grid cells.
 
 # ---- model -------------------------------------------------------------------
-# pooling: attention-pool 196x512 -> 29x512 (each region query attends the full grid).
+# pooling: attention-pool 196x512 -> 29x512.  Each region query attends the grid, but
+# MASKED to its own bbox cells (spec 3.1) -> alpha is a faithful within-region grounding
+# signal and small focal findings survive. Set MASK_BBOX=False to attend the full grid.
 POOL_HEADS = 4                  # multi-head attention pooling
-USE_GLOBAL_TOKEN = False        # add a 30th "global" query (recall safety net). Default off
-                                # because full-grid attention already carries global context.
+MASK_BBOX = True                # restrict each region query to its bbox grid cells (spec 3.1)
+USE_GLOBAL_TOKEN = False        # add a 30th "global" query as an extra region. Default off;
+                                # relational findings are handled by the GlobalHead+gate below.
 
-# head direction: "C" feat->14 | "A" feat->69->14 (pure CBM) | "B" feat+69->14 (hybrid)
-HEAD_MODE = "B"
+# neck: Linear feat->NECK_DIM + LayerNorm + GELU (spec 3.2). DISABLED by choice — we keep the
+# full 512-d region feature (richer signal). region_feat[512] is then the contract shared with M4
+# (its input/region = 512*3 + 14*2 = 1564, still light). Set NECK_DIM=128 to re-enable the neck.
+NECK_DIM = None
+
+# global branch (spec 3.5): GAP/global vector -> GlobalHead(14), fused with the region path at
+# image-logit via a learned per-disease gate  g=σ(gate(global)); fused = g*global + (1-g)*local.
+# Catches relational findings (cardiomegaly, diffuse edema, low lung volumes) not in one box.
+USE_GLOBAL_HEAD = True
+
+# head direction (spec 3.3 letters — A=safe fallback, C=most dangerous for faithfulness):
+#   "A" Direct:   region_feat -> 14                       (faithful "where", accuracy ceiling)
+#   "B" CBM:      region_feat -> 69 concept -> 14         (pure bottleneck, the only "why"-faithful path)
+#   "C" Hybrid:   region_feat -> 69; [feat(+leak) ⊕ 69] -> 14   (accuracy, but CBM-leakage risk)
+HEAD_MODE = "A"
 HEAD_TYPE = "mlp"               # "mlp" now; "kan" (FastKAN) later — same interface
 HEAD_HIDDEN = 512
 CONCEPT_DROPOUT = 0.1
-FEATURE_LEAK_DROPOUT = 0.3      # (B only) drop on the raw-feature path into disease head,
-                                # so disease leans on concepts -> more faithful, "leaky CBM"
+FEATURE_LEAK_DROPOUT = 0.3      # (C/Hybrid only) dropout on the raw-feature path into the disease
+                                # head, so disease leans on concepts -> "leaky CBM"
 
 # how to get the image-level 14 from the 29 region predictions
 REGION_AGG = "attention"        # "attention" | "max" | "mean"
+
+# ---- imbalance (spec 3.6, top priority) --------------------------------------
+USE_POS_WEIGHT = True           # RADAR-style log-scale pos_weight  α_i = log(1 + |D|/pos_i)
 
 # ---- training ----------------------------------------------------------------
 LR = 3e-4

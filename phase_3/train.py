@@ -13,11 +13,12 @@ import torch
 from torch.utils.data import DataLoader
 
 import config
+import constants as C
 from dataset import M3Dataset, collate
 from eval import evaluate
-from losses import compute_losses
+from losses import compute_losses, pos_weight_logscale
 
-_LABEL_KEYS = ("region_concepts", "region_chexpert", "image_chexpert", "present_mask")
+_LABEL_KEYS = ("region_concepts", "region_chexpert", "image_chexpert", "present_mask", "boxes")
 
 
 def to_device(batch: dict, device) -> dict:
@@ -84,6 +85,14 @@ def main() -> int:
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=config.WEIGHT_DECAY)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
+    pw = None
+    if config.USE_POS_WEIGHT:                    # RADAR log-scale pos_weight (spec 3.6)
+        pw = {"image": pos_weight_logscale(train_ds.ic, C.NUM_CHEX, args.device),
+              "region": pos_weight_logscale(train_ds.rx, C.NUM_CHEX, args.device),
+              "concept": pos_weight_logscale(train_ds.rc, C.NUM_CONCEPTS, args.device)}
+        print("[pos_weight] image med=%.2f region med=%.2f concept med=%.2f"
+              % (pw["image"].median(), pw["region"].median(), pw["concept"].median()))
+
     remote = f"{args.sync_remote.rstrip('/')}/{name}" if args.sync_remote else None
 
     def push():
@@ -110,8 +119,8 @@ def main() -> int:
         running = {}
         for batch in tl:
             b = to_device(batch, args.device)
-            out = model(b["grid"], b["global"], b["present_mask"])
-            loss, parts = compute_losses(out, b)
+            out = model(b["grid"], b["global"], b["present_mask"], b["boxes"])
+            loss, parts = compute_losses(out, b, pw)
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -127,24 +136,26 @@ def main() -> int:
         sched.step()
         n = max(1, len(tl))
         res = evaluate(model, vl, args.device)
-        auc = res["image_auc_macro"]
+        f1 = res["image_f1_macro"]              # headline metric for checkpoint selection (spec 3.6)
         print(f"epoch {epoch + 1:3}/{args.epochs} | loss {running.get('total', 0)/n:.4f} "
               f"(c {running.get('concept', 0)/n:.3f} r {running.get('region_chex', 0)/n:.3f} "
-              f"i {running.get('image_chex', 0)/n:.3f}) | val img-AUC {auc:.4f} "
-              f"region {res['region_auc_macro']:.4f}"
-              + (f" concept {res.get('concept_auc_macro', float('nan')):.4f}" if "concept_auc_macro" in res else ""))
+              f"i {running.get('image_chex', 0)/n:.3f}) | val img-F1 {f1:.4f} "
+              f"AUC {res['image_auc_macro']:.4f} | region F1 {res['region_f1_macro']:.4f}"
+              + (f" | concept F1 {res.get('concept_f1_macro', float('nan')):.4f}" if "concept_f1_macro" in res else ""))
 
-        if auc > best:
-            best = auc
+        is_best = f1 > best
+        if is_best:
+            best = f1
         ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                 "feat_dim": feat_dim, "mode": args.mode, "head_type": args.head_type,
-                "use_global": args.use_global, "epoch": epoch, "val_auc": auc, "best": best}
+                "use_global": args.use_global, "epoch": epoch,
+                "val_f1": f1, "val_auc": res["image_auc_macro"], "best": best}
         torch.save(ckpt, run_dir / "last.pt")
-        if auc >= best:
+        if is_best:
             torch.save(ckpt, run_dir / "best.pt")
         push()                                  # Drive checkpoint each epoch
 
-    print(f"\n[DONE] best val image-AUC = {best:.4f} -> {run_dir/'best.pt'}")
+    print(f"\n[DONE] best val image-F1 = {best:.4f} -> {run_dir/'best.pt'}")
     return 0
 
 
