@@ -19,6 +19,18 @@ from pathlib import Path
 import config
 
 
+def _rclone(*a) -> None:
+    import shutil
+    import subprocess
+    if not shutil.which("rclone"):
+        return
+    try:
+        subprocess.run(["rclone", *a], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="QLoRA finetune the SG LLM")
     p.add_argument("--data-dir", type=Path, default=config.WORK_ROOT / "sg_sft")
@@ -32,6 +44,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lora-r", type=int, default=16)
     p.add_argument("--lora-alpha", type=int, default=32)
     p.add_argument("--save-steps", type=int, default=200)
+    p.add_argument("--resume", action="store_true",
+                   help="continue from the last checkpoint in --out (pulled from Drive if --sync-remote)")
+    p.add_argument("--sync-remote", default=None,
+                   help="rclone remote for the run dir, e.g. dhint:sg_lora_runs/sg_lora")
     return p.parse_args()
 
 
@@ -41,7 +57,7 @@ def main() -> int:
     from datasets import load_dataset
     from peft import LoraConfig, prepare_model_for_kbit_training
     from transformers import (AutoModelForCausalLM, AutoTokenizer,
-                              BitsAndBytesConfig)
+                              BitsAndBytesConfig, TrainerCallback)
     from trl import SFTConfig, SFTTrainer
     from trl import DataCollatorForCompletionOnlyLM
 
@@ -49,6 +65,13 @@ def main() -> int:
     val_path = args.data_dir / "val.jsonl"
     if not train_path.exists():
         raise SystemExit(f"[ERROR] {train_path} not found (run build_sft_dataset.py).")
+
+    # Drive-resumable: pull any prior checkpoints back before training (spec parity with phase3/4)
+    remote = args.sync_remote.rstrip("/") if args.sync_remote else None
+    args.out.mkdir(parents=True, exist_ok=True)
+    if args.resume and remote:
+        print(f"[resume] pulling checkpoints from {remote}")
+        _rclone("copy", remote, str(args.out), "--quiet")
 
     tok = AutoTokenizer.from_pretrained(args.model)
     if tok.pad_token is None:
@@ -111,9 +134,28 @@ def main() -> int:
         formatting_func=fmt,
         data_collator=collator,
     )
-    trainer.train()
+
+    # push the run dir to Drive on every checkpoint (survives Kaggle session death)
+    if remote:
+        out_dir = str(args.out)
+
+        class RcloneSync(TrainerCallback):
+            def on_save(self, a, state, control, **kw):
+                _rclone("copy", out_dir, remote, "--transfers", "4", "--quiet")
+
+        trainer.add_callback(RcloneSync())
+
+    ckpt = None
+    if args.resume and any(args.out.glob("checkpoint-*")):
+        ckpt = True
+        print(f"[resume] continuing from a checkpoint in {args.out}")
+    trainer.train(resume_from_checkpoint=ckpt)
+
     trainer.save_model(str(args.out))
     tok.save_pretrained(str(args.out))
+    if remote:
+        _rclone("copy", str(args.out), remote, "--quiet")
+        print(f"adapters pushed to {remote}")
     print(f"\nLoRA adapters saved -> {args.out}")
     return 0
 
