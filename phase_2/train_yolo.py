@@ -28,6 +28,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--imgsz", type=int, default=config.IMGSZ)
     p.add_argument("--batch", type=int, default=config.BATCH)
     p.add_argument("--epochs", type=int, default=config.EPOCHS)
+    p.add_argument("--fraction", type=float, default=1.0,
+                   help="train on this fraction of the dataset (1.0 = all). 29 anatomical "
+                        "regions are 'deceptively easy' (see docs/critical_yolo.md), so a "
+                        "subset trains a solid box detector far faster. Eval/val unaffected.")
     p.add_argument("--patience", type=int, default=config.PATIENCE)
     p.add_argument("--save-period", type=int, default=config.SAVE_PERIOD)
     p.add_argument("--device", default="0")
@@ -81,6 +85,7 @@ def main() -> int:
         imgsz=args.imgsz,
         batch=args.batch,
         epochs=args.epochs,
+        fraction=args.fraction,
         patience=args.patience,
         save_period=args.save_period,
         device=args.device,
