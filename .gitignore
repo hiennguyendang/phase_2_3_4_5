@@ -1,7 +1,8 @@
 .venv/
 docs/
 data/
-CLAUDE.md
+CLAUDE_1.md
+CLAUDE_2.md
 download_data.py
 __pycache__/
 */__pycache__/

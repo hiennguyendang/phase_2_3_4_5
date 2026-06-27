@@ -53,6 +53,11 @@ python phase_4/infer.py --ckpt <run>/m4/best.pt --split test --out m4_pred.jsonl
 ```
 
 ## Notes
+- ⚠️ **EVAL labels are a TRAIN-ONLY source (OPEN decision B2 — biggest risk; see
+  `docs/VERA_methodology_concerns.md`).** `comparison_cues` are NLP-derived (weak), fine to **train**
+  on but **must NOT be used to evaluate** M4. The improved/stable/worsened **test set must be
+  human-annotated** (e.g. MS-CXR-T). Sourcing it is **TODO and high-priority** — the whole
+  temporal-faithful claim rests on a clean human temporal eval set.
 - **Labels** come from the **current** scene graph's `comparison_cues` (the NLP already encoded the
   comparison to prior). A cued phrase's positive findings set the progression of the diseases they
   feed; conflicts resolve worsened > improved > stable. Cells with no cue stay `-100` (masked).

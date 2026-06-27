@@ -75,6 +75,8 @@ python phase_3/infer.py        --ckpt <run>/m3_A/best.pt --split test --out m3_p
 - **Imbalance** (`USE_POS_WEIGHT`): RADAR log-scale `α_i = log(1+|D|/pos_i)` on every BCE term.
 - **Labels:** `1` positive / `0` negative / `-100` not-mentioned (never collapse -100→0).
   Per-region CheXpert is **derived** from concepts via the map in `constants.py`.
-- **M4 hook:** `model.py` returns `region_feats [B,29,128]` and `region_attn [B,29,196]`.
-- Boxes for training = scene-graph GT (MIMIC). For CheXplus/NIH, feed detector boxes
-  into a dataset variant (same array shapes).
+- **M4 hook:** `model.py` returns `region_feats [B,29,512]` (128 if neck on) and `region_attn [B,29,196]`.
+- **Boxes (OPEN decision B1, see `docs/VERA_methodology_concerns.md`):** currently trains on
+  scene-graph **GT boxes** (`boxes.npy`). v1 should instead train+infer on **detector boxes** (matched
+  distribution); gold boxes kept ONLY for the **gold-vs-detector oracle ablation** at M3. A
+  detector-box dataset variant (read boxes from `infer_yolo` JSON) is **TODO**.

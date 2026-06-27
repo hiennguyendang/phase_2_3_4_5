@@ -75,3 +75,9 @@ python phase_5/run.py --m3-pred ... --m4-pred ... --temperature data/m5_temperat
 - wire a real `backend` into `paraphrase.paraphrase` (re-verify + fallback already handled).
 - visualization (provenance-per-sentence, the 29-region coverage map, change-ledger) reads these
   JSON lines directly — `m3_cells` + `coverage_map` are already emitted for it.
+
+## Methodology TODO (docs/VERA_methodology_concerns.md)
+- **B4 calibration evidence:** `calibrate.py` already reports per-class ECE before/after; add a
+  **reliability diagram** and treat poorly-calibrated rare classes as default-hedge.
+- **B5 global-finding grounding:** relational findings (cardiomegaly, diffuse edema) come from the
+  M3 GlobalHead, not a box. Label them in the report as **global grounding**, not a fake region cell.
