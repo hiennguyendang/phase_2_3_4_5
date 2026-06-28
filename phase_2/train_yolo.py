@@ -51,6 +51,12 @@ def main() -> int:
     args = parse_args()
     from ultralytics import YOLO
 
+    # Defensive: strip stray surrounding quotes from the remote. IPython `!cmd $VAR`
+    # can leak literal quotes into argv (e.g. '"dhint:phase2_runs"'), which makes
+    # rclone treat it as a local path and silently NOT write to Drive.
+    if args.sync_remote:
+        args.sync_remote = args.sync_remote.strip().strip('"').strip("'")
+
     cache = args.cache if args.cache in ("ram", "disk") else False
 
     def _attach_sync(model) -> None:
