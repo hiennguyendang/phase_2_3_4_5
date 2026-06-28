@@ -118,6 +118,18 @@ def make_legend(colors, font, out: Path):
     im.save(out / "_legend.png")
 
 
+def resolve_labels_dir(labels_dir: Path, split: str) -> Path:
+    """Accept a dir that holds *.txt directly, OR a parent that nests them under
+    {split} / labels/{split} / labels/labels/{split} (build_yolo_dataset + Kaggle wrap)."""
+    if any(labels_dir.glob("*.txt")):
+        return labels_dir
+    for cand in (labels_dir / split, labels_dir / "labels" / split,
+                 labels_dir / "labels" / "labels" / split):
+        if cand.is_dir() and any(cand.glob("*.txt")):
+            return cand
+    return labels_dir  # let the caller error with the original path
+
+
 def find_images(root: Path):
     idx = {}
     for dp, _dn, fns in os.walk(root):
@@ -152,6 +164,7 @@ def main() -> int:
         args.labels_dir = args.labels_dir or args.yolo_ds / "labels" / args.split
     if not args.images_root or not args.labels_dir:
         raise SystemExit("[ERROR] give --yolo-ds OR (--images-root AND --labels-dir)")
+    args.labels_dir = resolve_labels_dir(Path(args.labels_dir), args.split)
     args.out.mkdir(parents=True, exist_ok=True)
 
     colors = class_colors()
