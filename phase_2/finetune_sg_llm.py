@@ -46,6 +46,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--grad-accum", type=int, default=8)
     p.add_argument("--lora-r", type=int, default=16)
     p.add_argument("--lora-alpha", type=int, default=32)
+    p.add_argument("--max-train-samples", type=int, default=0,
+                   help="subsample the train split to this many rows (0 = all); SFT extraction "
+                        "converges well on ~60-80k, cutting wall-clock on slow T4 4-bit")
     p.add_argument("--save-steps", type=int, default=200)
     p.add_argument("--resume", action="store_true",
                    help="continue from the last checkpoint in --out (pulled from Drive if --sync-remote)")
@@ -74,6 +77,15 @@ def main() -> int:
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     is_main = local_rank == 0
 
+    # precision: bf16 ONLY on Ampere+ (sm_80). T4 is Turing (sm_75) with NO hardware bf16 -> bf16
+    # there runs via slow emulation (≈minutes/step). Use fp16 on T4 -> tensor cores, ~10x faster.
+    cap = torch.cuda.get_device_capability(local_rank)
+    use_bf16 = cap[0] >= 8
+    compute_dtype = torch.bfloat16 if use_bf16 else torch.float16
+    if is_main:
+        print(f"[precision] {torch.cuda.get_device_name(local_rank)} sm_{cap[0]}{cap[1]} -> "
+              f"{'bf16' if use_bf16 else 'fp16'}")
+
     # Drive-resumable: pull prior checkpoints before training. Under DDP do it OUTSIDE this script
     # (the notebook pre-pulls once) to avoid all ranks racing on the same dir.
     remote = args.sync_remote.rstrip("/") if args.sync_remote else None
@@ -88,13 +100,13 @@ def main() -> int:
 
     bnb = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=compute_dtype,
     )
     # single-gpu: "auto"; DDP: pin the whole (quantized) model to THIS rank's gpu
     device_map = {"": local_rank} if world_size > 1 else "auto"
     model = AutoModelForCausalLM.from_pretrained(
         args.model, quantization_config=bnb, device_map=device_map,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=compute_dtype,
     )
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     model.config.use_cache = False
@@ -110,6 +122,10 @@ def main() -> int:
     if val_path.exists():
         data_files["validation"] = str(val_path)
     ds = load_dataset("json", data_files=data_files)
+    if args.max_train_samples and len(ds["train"]) > args.max_train_samples:
+        ds["train"] = ds["train"].shuffle(seed=42).select(range(args.max_train_samples))
+        if is_main:
+            print(f"[subsample] train -> {len(ds['train']):,} rows")
 
     def fmt(batch):
         return tok.apply_chat_template(batch["messages"], tokenize=False)
@@ -130,7 +146,8 @@ def main() -> int:
         logging_steps=20,
         save_steps=args.save_steps,
         save_total_limit=2,
-        bf16=True,
+        bf16=use_bf16,
+        fp16=not use_bf16,          # T4 (Turing) has no hw bf16 -> fp16, else bf16 emulation is glacial
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},   # needed for DDP + grad ckpt
         ddp_find_unused_parameters=False,                          # LoRA: no unused params
