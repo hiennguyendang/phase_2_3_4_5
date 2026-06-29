@@ -32,6 +32,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--device", default="0")
     p.add_argument("--batch", type=int, default=16)
     p.add_argument("--jsonl", action="store_true", help="also write a combined predictions.jsonl")
+    p.add_argument("--no-per-image", action="store_true",
+                   help="write ONLY the combined predictions.jsonl, skip per-image .json "
+                        "(use for the full ~220k MIMIC run to avoid a flood of tiny files; "
+                        "implies --jsonl)")
     p.add_argument("--limit", type=int, default=None)
     return p.parse_args()
 
@@ -55,8 +59,9 @@ def main() -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
     model = YOLO(str(args.weights))
+    write_per_image = not args.no_per_image
     combined = None
-    if args.jsonl:
+    if args.jsonl or args.no_per_image:
         combined = open(args.out / "predictions.jsonl", "w", encoding="utf-8")
 
     n = 0
@@ -88,8 +93,9 @@ def main() -> int:
                 "width": w, "height": h,
                 "objects": [best[k] for k in sorted(best)],
             }
-            (args.out / f"{img_path.stem}.json").write_text(
-                json.dumps(record), encoding="utf-8")
+            if write_per_image:
+                (args.out / f"{img_path.stem}.json").write_text(
+                    json.dumps(record), encoding="utf-8")
             if combined is not None:
                 combined.write(json.dumps(record) + "\n")
             n += 1

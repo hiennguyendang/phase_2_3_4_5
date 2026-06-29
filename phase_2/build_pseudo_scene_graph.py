@@ -1,14 +1,14 @@
 """Step 7 — generate pseudo scene graphs for images WITH reports (CheXplus).
 
-For each image: take the detector's 29 boxes (step 2 output) + the report, ask
-the fine-tuned LLM for the compact findings, snap to the controlled vocab, and
-assemble a *_SceneGraph.json. NIH has no report -> no cues -> intentionally
-excluded here (its boxes still come from the detector for C-KAN).
+For each image: take the detector's 29 boxes (step 2 output) + the report, ask the
+fine-tuned LLM for the FLAT findings (sg_schema), validate them against the closed
+vocab (parse_flat drops hallucinations), map them to relation/cue strings
+(compact_from_flat) and assemble a *_SceneGraph.json. NIH has no report -> no cues ->
+intentionally excluded here (its boxes still come from the detector for C-KAN).
 
     python build_pseudo_scene_graph.py \
       --pred-dir /kaggle/working/pred \
       --metadata /kaggle/input/<chexplus>/chexplpus_metadata_final.jsonl \
-      --vocab /kaggle/working/sg_vocab.json \
       --lora /kaggle/working/sg_lora --out /kaggle/working/pseudo_sg \
       --update-metadata /kaggle/working/chexplus_with_scene.jsonl
 """
@@ -21,21 +21,14 @@ from pathlib import Path
 
 import config
 from scene_to_yolo import iter_jsonl
-from sg_lib import (
-    SYSTEM_PROMPT,
-    assemble_scene_graph,
-    available_regions,
-    build_user_prompt,
-    parse_compact,
-    snap_to_vocab,
-)
+from sg_lib import assemble_scene_graph, available_regions
+from sg_schema import SYSTEM_PROMPT, build_user_prompt, compact_from_flat, parse_flat
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Build pseudo scene graphs with the SG LLM")
+    p = argparse.ArgumentParser(description="Build pseudo scene graphs with the flat SG LLM")
     p.add_argument("--pred-dir", type=Path, required=True, help="per-image detector JSONs (step 2)")
     p.add_argument("--metadata", type=Path, required=True, help="dataset jsonl with reports")
-    p.add_argument("--vocab", type=Path, default=config.WORK_ROOT / "sg_vocab.json")
     p.add_argument("--model", default=config.SG_LLM_MODEL)
     p.add_argument("--lora", type=Path, default=None, help="LoRA adapter dir (step 6)")
     p.add_argument("--out", type=Path, default=config.WORK_ROOT / "pseudo_sg")
@@ -77,9 +70,6 @@ def main() -> int:
     args = parse_args()
     if not args.pred_dir.exists():
         raise SystemExit(f"[ERROR] pred-dir not found: {args.pred_dir}")
-    vocab = json.loads(args.vocab.read_text(encoding="utf-8")) if args.vocab.exists() else {}
-    if not vocab:
-        print("[WARN] no vocab -> skipping vocab snapping (hallucinations not filtered)")
 
     # reports + ids from metadata
     meta: dict[str, dict] = {}
@@ -139,9 +129,8 @@ def main() -> int:
         texts = tok.batch_decode(new_tokens, skip_special_tokens=True)
 
         for (iid, pred, row, regions), text in zip(batch, texts):
-            compact = parse_compact(text)
-            if vocab:
-                compact = snap_to_vocab(compact, vocab)
+            flat = parse_flat(text)                  # validated against the closed vocab
+            compact = compact_from_flat(flat)        # -> relation/cue strings, deterministic
             scene = assemble_scene_graph(
                 iid, pred.get("objects", []), compact,
                 viewpoint=row.get("viewpoint"),

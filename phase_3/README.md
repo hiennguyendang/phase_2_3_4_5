@@ -42,10 +42,21 @@ Run all three; **faithfulness numbers (not accuracy) decide which gets the "why"
 | `faithfulness.py` | spec 3.4 tests: go/no-go concept-from-image, intervention (B), leakage (C) | yes |
 
 ## Run order
+> **STATUS (2026-06-29): phase_3 training is DEFERRED** (waiting on M1 BioViL-T features). The only
+> step being done now is the **detector-box prerequisite** — step 0b (`phase2_infer_boxes.ipynb` →
+> `predictions.jsonl`). Steps 0/0b-align/1/2+ below are the full order for when phase_3 resumes;
+> re-run `labels.py` then (it now hedge-masks). `boxes_from_pred.py` only runs once the manifest exists.
+
 ```bash
 # 0) one-time prep (local, no GPU) — upload the outputs to Kaggle
 python phase_3/labels.py  --scene-root <chest-imagenome> --out-dir data/m3_labels
 python phase_3/pairing.py  # -> data/m3_pairs.jsonl
+
+# 0b) detector boxes (BOX_SOURCE="detector"): run YOLO over all MIMIC (GPU; Kaggle notebook
+#     phase_2/phase2_infer_boxes.ipynb pulls best.pt from Drive), then align to the manifest:
+python phase_2/infer_yolo.py --weights best.pt --source <mimic-448> --out pred --no-per-image
+python phase_3/boxes_from_pred.py --pred pred/predictions.jsonl \
+       --manifest data/m3_labels/manifest.jsonl --out-dir data/m3_labels  # -> boxes_det.npy
 
 # 1) features (M1, EXTERNAL): your collaborator extracts BioViL-T grids and gives you the
 #    cache <image_id>.npy [197,C]. phase_3 only LOADS it (features.py is the format contract).
@@ -76,7 +87,12 @@ python phase_3/infer.py        --ckpt <run>/m3_A/best.pt --split test --out m3_p
 - **Labels:** `1` positive / `0` negative / `-100` not-mentioned (never collapse -100→0).
   Per-region CheXpert is **derived** from concepts via the map in `constants.py`.
 - **M4 hook:** `model.py` returns `region_feats [B,29,512]` (128 if neck on) and `region_attn [B,29,196]`.
-- **Boxes (OPEN decision B1, see `docs/VERA_methodology_concerns.md`):** currently trains on
-  scene-graph **GT boxes** (`boxes.npy`). v1 should instead train+infer on **detector boxes** (matched
-  distribution); gold boxes kept ONLY for the **gold-vs-detector oracle ablation** at M3. A
-  detector-box dataset variant (read boxes from `infer_yolo` JSON) is **TODO**.
+- **Boxes (B1, see `docs/VERA_methodology_concerns.md`):** `config.BOX_SOURCE` (default
+  **`"detector"`**) selects the ROI-pool box source — YOLO detector boxes (`boxes_det.npy`, same
+  source at train & launch) vs silver **GT boxes** (`boxes.npy`). Build the detector boxes with
+  `phase_2/infer_yolo.py` → `phase_3/boxes_from_pred.py` (aligned to the label manifest). Flip to
+  `--box-source gt` (train/eval) for the **gold-vs-detector oracle ablation** at M3.
+- **Uncertainty (shared with M2/M4):** a finding asserted in a HEDGED sentence ("possible", "no
+  definite", "cannot exclude" — `hedge.py::is_hedged`) is **masked** at M3 (`-100`, not trained as a
+  confident finding). Detected from silver `phrases` or the LLM's `uncertainty_cues`, so the silver
+  and LLM-pseudo paths mask identically.

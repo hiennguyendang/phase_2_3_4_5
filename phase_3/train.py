@@ -39,6 +39,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--batch", type=int, default=config.BATCH)
     p.add_argument("--lr", type=float, default=config.LR)
     p.add_argument("--head-type", default=config.HEAD_TYPE)
+    p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
+                   help="bbox source for ROI-pool: detector (default) or gt (oracle ablation)")
     p.add_argument("--use-global", action="store_true")
     p.add_argument("--workers", type=int, default=2)
     p.add_argument("--device", default="cuda")
@@ -69,9 +71,9 @@ def main() -> int:
     run_dir = args.out / name
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    train_ds = M3Dataset(args.labels_dir, args.features_root, "train")
-    val_ds = M3Dataset(args.labels_dir, args.features_root, "val")
-    print(f"train={len(train_ds):,} val={len(val_ds):,}")
+    train_ds = M3Dataset(args.labels_dir, args.features_root, "train", box_source=args.box_source)
+    val_ds = M3Dataset(args.labels_dir, args.features_root, "val", box_source=args.box_source)
+    print(f"train={len(train_ds):,} val={len(val_ds):,} | boxes={args.box_source}")
     if len(train_ds) == 0:
         raise SystemExit("[ERROR] no training samples (features missing or split empty)")
     feat_dim = train_ds.feat_dim()

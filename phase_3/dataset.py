@@ -18,13 +18,27 @@ from features import FeatureStore
 
 
 class M3Dataset(Dataset):
-    def __init__(self, labels_dir: Path, features_root: Path, split: str | None = None):
+    def __init__(self, labels_dir: Path, features_root: Path, split: str | None = None,
+                 box_source: str | None = None):
         labels_dir = Path(labels_dir)
         self.rc = np.load(labels_dir / "region_concepts.npy", mmap_mode="r")
         self.rx = np.load(labels_dir / "region_chexpert.npy", mmap_mode="r")
-        self.bx = np.load(labels_dir / "boxes.npy", mmap_mode="r")
-        self.pm = np.load(labels_dir / "present_mask.npy", mmap_mode="r")
         self.ic = np.load(labels_dir / "image_chexpert.npy", mmap_mode="r")
+
+        # bbox source: "detector" (YOLO, default — same source train & launch) | "gt" (silver oracle)
+        src = (box_source or config.BOX_SOURCE).lower()
+        if src == "detector":
+            bx_f, pm_f = labels_dir / "boxes_det.npy", labels_dir / "present_mask_det.npy"
+            if not bx_f.exists():
+                raise FileNotFoundError(
+                    f"BOX_SOURCE='detector' but {bx_f.name} is missing in {labels_dir}. "
+                    "Run phase_2/infer_yolo.py then phase_3/boxes_from_pred.py, or set "
+                    "config.BOX_SOURCE='gt' / pass box_source='gt'.")
+        else:
+            bx_f, pm_f = labels_dir / "boxes.npy", labels_dir / "present_mask.npy"
+        self.box_source = src
+        self.bx = np.load(bx_f, mmap_mode="r")
+        self.pm = np.load(pm_f, mmap_mode="r")
         self.store = FeatureStore(features_root)
 
         manifest = [json.loads(l) for l in open(labels_dir / "manifest.jsonl", encoding="utf-8")]

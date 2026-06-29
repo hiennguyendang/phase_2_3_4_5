@@ -85,7 +85,13 @@ BATCH = 32
 LAMBDA_CONCEPT = 1.0            # weight on per-region concept loss
 LAMBDA_REGION_CHEX = 0.5        # weight on per-region CheXpert loss
 LAMBDA_IMAGE_CHEX = 1.0         # weight on image-level CheXpert loss
-USE_GT_BOXES = True             # train on scene-graph GT boxes; detector boxes at inference
+# Which bbox source feeds the ROI-pool + present-mask (spec B1).
+#   "detector" : YOLO boxes from boxes_from_pred.py (boxes_det.npy / present_mask_det.npy).
+#                THE DEFAULT — M3 sees the SAME box source at train and at launch (no GT-box
+#                privilege the deployed system never has).
+#   "gt"       : silver ImaGenome GT boxes (boxes.npy / present_mask.npy). Use for the
+#                gold-box-vs-detector-box ORACLE ablation (how much detector error costs M3).
+BOX_SOURCE = "detector"         # "detector" | "gt"
 
 # train only on rows whose `dataset` is in this set (have per-region concept labels)
 CONCEPT_SUPERVISED_DATASETS = ("mimic",)

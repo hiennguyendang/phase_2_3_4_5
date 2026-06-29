@@ -20,11 +20,26 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
 
 import constants as C
+
+# canonical hedge detector (repo root) — shared with phase_2 + phase_4 so "uncertain" never diverges
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from hedge import is_hedged  # noqa: E402
+
+
+def _phrase_is_uncertain(entry: dict, p_idx: int) -> bool:
+    """A phrase group is uncertain if its source sentence is hedged (silver) OR it carries an
+    `uncertainty_cues` entry (LLM-assembled pseudo scene graph, where phrases are empty)."""
+    phrases = entry.get("phrases", []) or []
+    if p_idx < len(phrases) and is_hedged(phrases[p_idx]):
+        return True
+    unc = entry.get("uncertainty_cues", []) or []
+    return bool(p_idx < len(unc) and unc[p_idx])
 
 try:
     from tqdm import tqdm
@@ -93,12 +108,17 @@ def region_concepts_from_scene(scene: dict) -> tuple[np.ndarray, np.ndarray, np.
         boxes[ri] = (x1, y1, x2, y2)
         mask[ri] = 1
 
-    # concept polarity from attributes[] (yes wins over no; absent stays -100)
+    # concept polarity from attributes[] (yes wins over no; absent stays -100).
+    # HEDGED mentions are SKIPPED -> a hedged-only concept stays -100 (masked-BCE ignores it),
+    # so "possible pneumonia" never trains the image classifier as a confident finding. A certain
+    # mention in another phrase still sets 1/0 normally.
     for entry in scene.get("attributes", []) or []:
         ri = C.REGION_INDEX.get(entry.get("bbox_name"))
         if ri is None:
             continue
-        for per_phrase in entry.get("attributes", []) or []:
+        for p_idx, per_phrase in enumerate(entry.get("attributes", []) or []):
+            if _phrase_is_uncertain(entry, p_idx):
+                continue
             for s in (per_phrase or []):
                 t = parse_triplet(s)
                 if t is None:

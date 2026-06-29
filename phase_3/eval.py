@@ -101,6 +101,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--features-root", type=Path, default=config.DEFAULT_FEATURES_ROOT)
     p.add_argument("--split", default="test")
     p.add_argument("--batch", type=int, default=config.BATCH)
+    p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
+                   help="bbox source: detector (default) or gt (oracle ablation)")
     p.add_argument("--device", default="cuda")
     return p.parse_args()
 
@@ -109,7 +111,7 @@ def main() -> int:
     import model as M
     args = parse_args()
     ck = torch.load(args.ckpt, map_location=args.device)
-    ds = M3Dataset(args.labels_dir, args.features_root, args.split)
+    ds = M3Dataset(args.labels_dir, args.features_root, args.split, box_source=args.box_source)
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
     config.USE_GLOBAL_TOKEN = ck.get("use_global", config.USE_GLOBAL_TOKEN)
     m = M.build_model(ck["feat_dim"], ck["mode"]).to(args.device)

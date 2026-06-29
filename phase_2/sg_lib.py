@@ -138,7 +138,10 @@ def _clean_compact(obj: Any) -> dict[str, list[dict]]:
 
 
 # ---------------------------------------------------------------------------
-# prompts
+# prompts  [LEGACY — the live pipeline uses the FLAT schema in sg_schema.py.
+# compact_target_from_scene_graph / parse_compact / snap_to_vocab and this prompt
+# are the old relation-string target, kept only for extract_sg_vocab.py. New code
+# should import SYSTEM_PROMPT / build_user_prompt / parse_flat from sg_schema.]
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = (
     "You are a radiology scene-graph extractor. Given a chest X-ray report and the "
@@ -215,13 +218,14 @@ def assemble_scene_graph(
         oid = detected.get(region)
         if oid is None:               # detector didn't find this region -> skip
             continue
-        rel_lists, cmp_c, tmp_c, sev_c, tex_c, phrases = [], [], [], [], [], []
+        rel_lists, cmp_c, tmp_c, sev_c, tex_c, unc_c, phrases = [], [], [], [], [], [], []
         for f in findings:
             rel_lists.append(list(f.get("rel", [])))
             cmp_c.append(list(f.get("comparison", [])))
             tmp_c.append(list(f.get("temporal", [])))
             sev_c.append(list(f.get("severity", [])))
             tex_c.append(list(f.get("texture", [])))
+            unc_c.append(list(f.get("uncertainty", [])))   # ["uncertainty|yes|hedged"] or []
             phrases.append("")
         attributes.append({
             region: True,
@@ -233,6 +237,7 @@ def assemble_scene_graph(
             "temporal_cues": tmp_c,
             "severity_cues": sev_c,
             "texture_cues": tex_c,
+            "uncertainty_cues": unc_c,
             "object_id": oid,
         })
 

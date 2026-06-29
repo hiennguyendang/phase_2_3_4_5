@@ -21,11 +21,25 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
 
 import constants as C
+
+# canonical hedge detector (repo root) — shared with phase_2 + phase_3 so "uncertain" never diverges
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from hedge import is_hedged  # noqa: E402
+
+
+def _phrase_is_uncertain(entry: dict, p_idx: int) -> bool:
+    """Hedged source sentence (silver) OR an `uncertainty_cues` entry (LLM pseudo scene graph)."""
+    phrases = entry.get("phrases", []) or []
+    if p_idx < len(phrases) and is_hedged(phrases[p_idx]):
+        return True
+    unc = entry.get("uncertainty_cues", []) or []
+    return bool(p_idx < len(unc) and unc[p_idx])
 
 try:
     from tqdm import tqdm
@@ -98,6 +112,8 @@ def progression_from_scene(scene: dict) -> tuple[np.ndarray, int]:
         phrase_attrs = entry.get("attributes", []) or []      # list[ list[str] ]
         cues = entry.get("comparison_cues", []) or []          # parallel list[ list[str] ]
         for p_idx, attrs in enumerate(phrase_attrs):
+            if _phrase_is_uncertain(entry, p_idx):             # hedged -> no confident progression
+                continue
             cls = _cue_class(cues[p_idx] if p_idx < len(cues) else None)
             if cls is None:
                 continue

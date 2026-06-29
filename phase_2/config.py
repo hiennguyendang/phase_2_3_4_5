@@ -72,9 +72,12 @@ AUG = dict(mosaic=0.0, mixup=0.0, degrees=2.0, perspective=0.0005)
 
 
 # ----------------------------------------------------------------------------
-# LLM branch (attribute/relationship) — scene-graph extractor.
+# LLM branch — report -> flat per-region findings extractor (see sg_schema.py).
+# 3B (not 7B): the task is closed-vocab extraction after SFT on ~200k ImaGenome
+# pairs, so a 3B matches 7B here while running far cheaper at launch. Bump to
+# Qwen2.5-7B-Instruct only if eval_sg_llm.py shows a real per-finding-F1 gap.
 # ----------------------------------------------------------------------------
-SG_LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+SG_LLM_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 
 
 def env_path(name: str, default: Path) -> Path:

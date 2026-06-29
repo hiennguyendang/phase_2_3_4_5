@@ -1,14 +1,16 @@
-"""Step 6 — QLoRA fine-tune the scene-graph LLM (Qwen2.5-7B-Instruct).
+"""Step 6 — QLoRA fine-tune the flat scene-graph extractor LLM (Qwen2.5-3B-Instruct).
 
-4-bit nf4 + LoRA, completion-only loss (learn the assistant JSON only).
+4-bit nf4 + LoRA, completion-only loss (learn the assistant JSON only). The target is
+the FLAT per-region findings JSON from build_sft_dataset.py (sg_schema), so a 3B is enough.
 
     pip install -q transformers trl peft bitsandbytes accelerate datasets
     python finetune_sg_llm.py --data-dir /kaggle/working/sg_sft \
         --out /kaggle/working/sg_lora --epochs 2
 
-Kaggle (single 16GB GPU): defaults below fit a 7B QLoRA. Drop --max-len or use a
-smaller --model if you OOM. Adapters are saved to --out; merge or load on top of
-the base model in step 7.
+Kaggle (single 16GB T4): a 3B QLoRA fits with room to spare. The default --model comes
+from config.SG_LLM_MODEL (3B); pass --model Qwen/Qwen2.5-7B-Instruct to compare. The
+response_template below ("<|im_start|>assistant\\n") matches the Qwen2.5 chat template;
+change it if you switch to a non-Qwen base. Adapters are saved to --out (step 7 loads them).
 """
 
 from __future__ import annotations
