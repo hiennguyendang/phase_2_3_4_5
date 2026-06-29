@@ -148,6 +148,7 @@ def main() -> int:
         save_total_limit=2,
         bf16=use_bf16,
         fp16=not use_bf16,          # T4 (Turing) has no hw bf16 -> fp16, else bf16 emulation is glacial
+        group_by_length=True,       # batch similar-length samples -> far less padding -> faster
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},   # needed for DDP + grad ckpt
         ddp_find_unused_parameters=False,                          # LoRA: no unused params

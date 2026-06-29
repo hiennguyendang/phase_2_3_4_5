@@ -26,7 +26,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import config
-from sg_schema import PROG_NAMES, parse_flat
+from sg_schema import PROG_NAMES, SYSTEM_PROMPT_STRICT, parse_flat
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +89,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out", type=Path, default=config.WORK_ROOT / "sg_eval.json")
     p.add_argument("--batch", type=int, default=8)
     p.add_argument("--max-new-tokens", type=int, default=512)
+    p.add_argument("--prompt", choices=["sft", "strict"], default="sft",
+                   help="sft = the system prompt baked in the data (for the finetuned model); "
+                        "strict = the tighter zero-shot prompt with an inline example (for "
+                        "un-finetuned base models)")
     p.add_argument("--limit", type=int, default=2000, help="eval only first N samples (0 = all)")
     p.add_argument("--top-findings", type=int, default=20)
     p.add_argument("--no-4bit", action="store_true")
@@ -103,12 +107,14 @@ def load_llm(args):
     tok.padding_side = "left"
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    kwargs = dict(device_map="auto", torch_dtype=torch.bfloat16)
+    # bf16 only on Ampere+ (sm_80). T4 is Turing (sm_75): bf16 runs via slow emulation -> use fp16.
+    dt = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
+    kwargs = dict(device_map="auto", torch_dtype=dt)
     if not args.no_4bit:
         from transformers import BitsAndBytesConfig
         kwargs["quantization_config"] = BitsAndBytesConfig(
             load_in_4bit=True, bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=torch.bfloat16)
+            bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=dt)
     model = AutoModelForCausalLM.from_pretrained(args.model, **kwargs)
     if args.lora is not None:
         from peft import PeftModel
@@ -131,6 +137,8 @@ def main() -> int:
         sys_m = next(m["content"] for m in msgs if m["role"] == "system")
         usr_m = next(m["content"] for m in msgs if m["role"] == "user")
         gold = next(m["content"] for m in msgs if m["role"] == "assistant")
+        if args.prompt == "strict":            # zero-shot: tighter prompt + inline example
+            sys_m = SYSTEM_PROMPT_STRICT
         rows.append((sys_m, usr_m, parse_flat(gold)))
         if args.limit and len(rows) >= args.limit:
             break

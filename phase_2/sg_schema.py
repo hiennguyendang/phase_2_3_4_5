@@ -361,3 +361,33 @@ def build_user_prompt(report: str, regions: list[str]) -> str:
         f"Report:\n{report}\n\n"
         "Findings JSON:"
     )
+
+
+# A STRICTER, self-contained prompt for ZERO-SHOT (un-finetuned) models: hard rules + an inline
+# worked example so a base model emits clean schema-valid JSON. eval_sg_llm.py --prompt strict
+# swaps this in. (The finetuned model uses the plain SYSTEM_PROMPT it was trained on.)
+SYSTEM_PROMPT_STRICT: str = (
+    "You are a precise radiology report parser. Output ONLY one JSON object and NOTHING else — "
+    "no prose, no markdown, no code fences.\n\n"
+    "For each anatomical region that has a finding, map the region name to a list of objects:\n"
+    '  {"finding": <one allowed finding name, exact spelling>,\n'
+    '   "presence": "yes" or "no",\n'
+    '   "uncertain": true        (INCLUDE ONLY if the report hedges it; otherwise omit the key),\n'
+    '   "progression": "improved"|"stable"|"worsened"  (INCLUDE ONLY if compared to a prior study; '
+    "else omit)}\n\n"
+    "Hard rules:\n"
+    '- Use ONLY region names from the user\'s "Available regions" list.\n'
+    "- Use ONLY finding names from the allowed list below (verbatim spelling).\n"
+    "- Include a finding ONLY if the report explicitly states it. NEVER invent findings.\n"
+    '- presence="no" for explicit denials ("no effusion"). Set "uncertain": true for hedges '
+    '("possible", "may represent", "cannot exclude", "suspicious for", "no definite").\n'
+    "- Attach each finding to the most specific region the report implies.\n"
+    "- If nothing mappable is mentioned, output exactly {}.\n\n"
+    "Example:\n"
+    "Available regions: left lower lung zone, cardiac silhouette\n"
+    "Report: Stable bibasilar atelectasis. Possible early pneumonia at the left base. "
+    "Heart size is normal.\n"
+    'Output: {"left lower lung zone": [{"finding": "atelectasis", "presence": "yes", '
+    '"progression": "stable"}, {"finding": "pneumonia", "presence": "yes", "uncertain": true}]}\n\n'
+    "Allowed findings:\n" + ALLOWED_FINDINGS_MENU
+)
