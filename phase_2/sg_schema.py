@@ -35,8 +35,13 @@ from typing import Any
 
 from constants import CLASS_NAMES, canonical_name
 
-# canonical hedge detector lives at the repo root so phase_2/3/4 share ONE definition
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# canonical hedge detector (hedge.py at repo root) shared by phase_2/3/4. Search ancestor dirs so
+# it resolves both in-place (repo root = parents[1]) AND when phase_2 is copied next to hedge.py
+# on Kaggle (e.g. /kaggle/working/{phase_2,hedge.py}).
+for _cand in Path(__file__).resolve().parents:
+    if (_cand / "hedge.py").exists():
+        sys.path.insert(0, str(_cand))
+        break
 from hedge import is_hedged  # noqa: E402
 
 # ---------------------------------------------------------------------------

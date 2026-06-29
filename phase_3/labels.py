@@ -27,8 +27,12 @@ import numpy as np
 
 import constants as C
 
-# canonical hedge detector (repo root) — shared with phase_2 + phase_4 so "uncertain" never diverges
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# canonical hedge detector (repo root) — shared with phase_2 + phase_4 so "uncertain" never diverges.
+# Search ancestor dirs (robust to the code being copied/relocated on Kaggle).
+for _cand in Path(__file__).resolve().parents:
+    if (_cand / "hedge.py").exists():
+        sys.path.insert(0, str(_cand))
+        break
 from hedge import is_hedged  # noqa: E402
 
 
