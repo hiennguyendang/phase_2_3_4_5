@@ -9,9 +9,15 @@ The assistant target is the SIMPLE per-region structure (see sg_schema.py):
     { "<region>": [ {"finding","presence","progression"} , ... ] }
 so a small (3B) model only copies a finding NAME, not a pipe-delimited relation string.
 
-Split train/val by a hash of patient_id (no patient leakage). Empty-target samples
-(no findings) are down-sampled so the model doesn't learn to output {}. The 784 gold
-ids (phase_2/gold_ids.txt) are excluded by default — gold is a final-only eval set.
+Split train/val/test by the metadata `split` field — the SAME canonical split YOLO (phase_2)
+and phase_3/phase_4 use — so the whole pipeline shares one split and there is NO cross-module
+leakage. (Do NOT re-split by hash: a patient in the official test could land in LLM-train.)
+    split train      -> train
+    split val/valid  -> val      (dev / overfit check / model selection)
+    split test       -> test     (in-dataset held-out test, the reportable number)
+    split gold       -> HELD OUT  (optional human-verified eval; ~800 imgs, not statistically
+                                   powerful, so the silver `test` split is the primary test)
+Empty-target samples (no findings) are down-sampled so the model doesn't learn to output {}.
 
 Runs LOCALLY (no GPU). Example:
     python build_sft_dataset.py \
@@ -34,13 +40,16 @@ from sg_schema import SYSTEM_PROMPT, build_user_prompt, dump_flat, flat_from_sce
 
 _DEFAULT_EXCLUDE = Path(__file__).resolve().parent / "gold_ids.txt"
 
+# metadata `split` value -> output split (gold/unknown -> held out). Matches config.SPLIT_MAP
+# except gold is EXCLUDED here (optional final eval), not folded into test.
+_SPLIT_ROUTE = {"train": "train", "val": "val", "valid": "val", "test": "test"}
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build chat SFT dataset for the flat SG LLM")
     p.add_argument("--metadata", type=Path, default=config.DEFAULT_METADATA)
     p.add_argument("--scene-root", type=Path, default=config.DEFAULT_SCENE_ROOT)
     p.add_argument("--out", type=Path, default=config.WORK_ROOT / "sg_sft")
-    p.add_argument("--val-frac", type=float, default=0.02)
     p.add_argument("--keep-empty-frac", type=float, default=0.1)
     p.add_argument("--exclude-ids", type=Path, default=_DEFAULT_EXCLUDE,
                    help="newline-separated image_ids to hold out (default: gold_ids.txt). "
@@ -77,8 +86,11 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     f_train = open(args.out / "train.jsonl", "w", encoding="utf-8")
     f_val = open(args.out / "val.jsonl", "w", encoding="utf-8")
+    f_test = open(args.out / "test.jsonl", "w", encoding="utf-8")
 
-    n_train = n_val = n_empty_kept = n_empty_drop = seen = no_scene = n_excluded = 0
+    writers = {"train": f_train, "val": f_val, "test": f_test}
+    counts = {"train": 0, "val": 0, "test": 0}
+    n_empty_kept = n_empty_drop = seen = no_scene = n_excluded = n_heldout = 0
     for row in iter_jsonl(args.metadata):
         if args.limit is not None and seen >= args.limit:
             break
@@ -90,6 +102,10 @@ def main() -> int:
             continue
         if image_id in exclude:
             n_excluded += 1
+            continue
+        split = _SPLIT_ROUTE.get(str(row.get("split", "")).strip().lower())
+        if split is None:                 # gold / unknown -> held out
+            n_heldout += 1
             continue
         seen += 1
 
@@ -128,23 +144,22 @@ def main() -> int:
             {"role": "assistant", "content": dump_flat(flat)},
         ]}
 
-        if patient_bucket(str(row.get("patient_id", image_id))) < args.val_frac:
-            f_val.write(json.dumps(sample, ensure_ascii=False) + "\n")
-            n_val += 1
-        else:
-            f_train.write(json.dumps(sample, ensure_ascii=False) + "\n")
-            n_train += 1
+        writers[split].write(json.dumps(sample, ensure_ascii=False) + "\n")   # metadata split
+        counts[split] += 1
 
         if seen % 10000 == 0:
-            print(f"  ...{seen:,} seen, train={n_train:,} val={n_val:,}")
+            print(f"  ...{seen:,} seen, train={counts['train']:,} "
+                  f"val={counts['val']:,} test={counts['test']:,}")
 
     f_train.close()
     f_val.close()
+    f_test.close()
     print("\n=== DONE ===")
-    print(f"train samples   : {n_train:,}")
-    print(f"val samples     : {n_val:,}")
+    print(f"train samples   : {counts['train']:,}")
+    print(f"val samples     : {counts['val']:,}")
+    print(f"test samples    : {counts['test']:,}")
     print(f"empty kept/drop : {n_empty_kept:,} / {n_empty_drop:,}")
-    print(f"excluded (gold) : {n_excluded:,}")
+    print(f"held out (gold) : {n_heldout:,} by split  + {n_excluded:,} by id-list")
     print(f"rows seen       : {seen:,}  (no scene: {no_scene:,})")
     print(f"written         : {args.out}")
     return 0

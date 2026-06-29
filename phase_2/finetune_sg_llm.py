@@ -16,6 +16,7 @@ change it if you switch to a non-Qwen base. Adapters are saved to --out (step 7 
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import config
@@ -68,10 +69,16 @@ def main() -> int:
     if not train_path.exists():
         raise SystemExit(f"[ERROR] {train_path} not found (run build_sft_dataset.py).")
 
-    # Drive-resumable: pull any prior checkpoints back before training (spec parity with phase3/4)
+    # distributed (DDP via torchrun): each rank holds a full model copy on its OWN gpu.
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    is_main = local_rank == 0
+
+    # Drive-resumable: pull prior checkpoints before training. Under DDP do it OUTSIDE this script
+    # (the notebook pre-pulls once) to avoid all ranks racing on the same dir.
     remote = args.sync_remote.rstrip("/") if args.sync_remote else None
     args.out.mkdir(parents=True, exist_ok=True)
-    if args.resume and remote:
+    if args.resume and remote and world_size == 1:
         print(f"[resume] pulling checkpoints from {remote}")
         _rclone("copy", remote, str(args.out), "--quiet")
 
@@ -83,8 +90,10 @@ def main() -> int:
         load_in_4bit=True, bnb_4bit_quant_type="nf4",
         bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=torch.bfloat16,
     )
+    # single-gpu: "auto"; DDP: pin the whole (quantized) model to THIS rank's gpu
+    device_map = {"": local_rank} if world_size > 1 else "auto"
     model = AutoModelForCausalLM.from_pretrained(
-        args.model, quantization_config=bnb, device_map="auto",
+        args.model, quantization_config=bnb, device_map=device_map,
         torch_dtype=torch.bfloat16,
     )
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
@@ -123,6 +132,8 @@ def main() -> int:
         save_total_limit=2,
         bf16=True,
         gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},   # needed for DDP + grad ckpt
+        ddp_find_unused_parameters=False,                          # LoRA: no unused params
         max_seq_length=args.max_len,
         report_to="none",
     )
@@ -137,13 +148,14 @@ def main() -> int:
         data_collator=collator,
     )
 
-    # push the run dir to Drive on every checkpoint (survives Kaggle session death)
+    # push the run dir to Drive on every checkpoint (survives Kaggle session death); rank 0 only
     if remote:
         out_dir = str(args.out)
 
         class RcloneSync(TrainerCallback):
             def on_save(self, a, state, control, **kw):
-                _rclone("copy", out_dir, remote, "--transfers", "4", "--quiet")
+                if state.is_world_process_zero:
+                    _rclone("copy", out_dir, remote, "--transfers", "4", "--quiet")
 
         trainer.add_callback(RcloneSync())
 
@@ -153,12 +165,13 @@ def main() -> int:
         print(f"[resume] continuing from a checkpoint in {args.out}")
     trainer.train(resume_from_checkpoint=ckpt)
 
-    trainer.save_model(str(args.out))
-    tok.save_pretrained(str(args.out))
-    if remote:
-        _rclone("copy", str(args.out), remote, "--quiet")
-        print(f"adapters pushed to {remote}")
-    print(f"\nLoRA adapters saved -> {args.out}")
+    if is_main:                          # save + push once (rank 0)
+        trainer.save_model(str(args.out))
+        tok.save_pretrained(str(args.out))
+        if remote:
+            _rclone("copy", str(args.out), remote, "--quiet")
+            print(f"adapters pushed to {remote}")
+        print(f"\nLoRA adapters saved -> {args.out}")
     return 0
 
 
