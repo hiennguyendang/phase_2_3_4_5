@@ -21,6 +21,10 @@ the 448x448 canvas pooling.py assumes (cell = 448/14), regardless of the source 
 
 from __future__ import annotations
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "src"))  # phase_3/src
+
 import argparse
 import json
 from pathlib import Path

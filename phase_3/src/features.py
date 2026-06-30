@@ -5,11 +5,14 @@
     this loader to match. phase_3 never runs the encoder — it only loads the cache.
 
 Expected cache format:
-  one  <image_id>.npy  per image, float16, shape [1 + 196, C]
+  one  <image_id>.npy  OR  <image_id>.pt  per image, float16, shape [1 + 196, C]
     row 0      = projected_global_embedding   (BioViL-T's own global vector)
     rows 1..196 = projected_patch_embeddings flattened from [C,14,14] -> [196, C]
   C is auto-detected (BioViL-T joint_feature_size, typically 512).
 
+Accepts BOTH numpy (.npy via np.load) and torch (.pt via torch.load) dumps — the BioViL-T
+collaborator's extractor writes .pt tensors, so we load those natively rather than forcing a
+re-export. A .pt holding a dict (e.g. {"features": tensor}) is tolerated (first tensor value used).
 Tolerant of [196, C] files too (no global row) -> global = mean(grid).
 phase_3 model code only ever calls this loader, so the on-disk format can change
 in ONE place without touching the model.
@@ -28,21 +31,22 @@ GRID_TOKENS = config.GRID_TOKENS  # 196
 
 
 class FeatureStore:
-    """Maps image_id -> feature tensors. Looks for <root>/<image_id>.npy (recursively
-    indexed once), so the cache can be flat or mirrored."""
+    """Maps image_id -> feature tensors. Looks for <root>/<image_id>.{npy,pt} (recursively
+    indexed once), so the cache can be flat or mirrored and either on-disk format."""
 
-    def __init__(self, root: Path, suffix: str = ".npy"):
+    def __init__(self, root: Path, suffixes: tuple[str, ...] | str = (".npy", ".pt")):
         self.root = Path(root)
-        self.suffix = suffix
+        self.suffixes = (suffixes,) if isinstance(suffixes, str) else tuple(suffixes)
         self._index: dict[str, Path] | None = None
         self.feat_dim: int | None = None
 
     def _build_index(self) -> dict[str, Path]:
         idx: dict[str, Path] = {}
-        for p in self.root.rglob(f"*{self.suffix}"):
-            idx.setdefault(p.stem, p)
+        for suf in self.suffixes:                      # .npy preferred (listed first) on stem clash
+            for p in self.root.rglob(f"*{suf}"):
+                idx.setdefault(p.stem, p)
         if not idx:
-            raise FileNotFoundError(f"no '*{self.suffix}' features under {self.root}")
+            raise FileNotFoundError(f"no '{', '.join(self.suffixes)}' features under {self.root}")
         return idx
 
     @property
@@ -59,7 +63,15 @@ class FeatureStore:
         path = self.index.get(image_id)
         if path is None:
             raise KeyError(f"no features for image_id={image_id}")
-        arr = np.load(path)                       # [197, C] or [196, C]
+        if path.suffix == ".pt":                  # torch dump (collaborator's BioViL-T extractor)
+            t = torch.load(path, map_location="cpu")
+            if isinstance(t, dict):               # tolerate {"features": tensor} style dumps
+                t = next((v for v in t.values() if torch.is_tensor(v)), None)
+                if t is None:
+                    raise ValueError(f"{path}: .pt dict has no tensor value")
+            arr = t.detach().to(torch.float32).cpu().numpy()
+        else:
+            arr = np.load(path)                   # [197, C] or [196, C]
         arr = np.asarray(arr, dtype=np.float32)
         if arr.ndim != 2:
             raise ValueError(f"{path}: expected 2-D feature array, got shape {arr.shape}")
@@ -81,11 +93,14 @@ class FeatureStore:
         return int(grid.shape[1])
 
 
-if __name__ == "__main__":  # tiny self-test on a synthetic feature file
+if __name__ == "__main__":  # tiny self-test on synthetic .npy and .pt feature files
     import tempfile
 
     d = Path(tempfile.mkdtemp())
     np.save(d / "MIMIC_p1_s1_abc.npy", np.random.randn(197, 512).astype(np.float16))
+    torch.save(torch.randn(197, 512, dtype=torch.float16), d / "MIMIC_p2_s2_def.pt")
     fs = FeatureStore(d)
-    g, gl = fs.load("MIMIC_p1_s1_abc")
-    print("grid", tuple(g.shape), "global", tuple(gl.shape), "dim", fs.detect_dim())
+    for iid in ("MIMIC_p1_s1_abc", "MIMIC_p2_s2_def"):
+        g, gl = fs.load(iid)
+        print(iid, "grid", tuple(g.shape), "global", tuple(gl.shape))
+    print("dim", fs.detect_dim())

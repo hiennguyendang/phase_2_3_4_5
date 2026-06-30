@@ -15,6 +15,10 @@ the Siamese). For each image writes  <image_id>.npy  float16  [29, feat_dim + 14
 
 from __future__ import annotations
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "src"))  # phase_3/src
+
 import argparse
 from pathlib import Path
 

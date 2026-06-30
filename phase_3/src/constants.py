@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
-REPO_ROOT = _HERE.parent
+REPO_ROOT = _HERE.parents[1]   # src/ -> phase_3/ -> repo root
 
 
 def _find(name: str) -> Path:

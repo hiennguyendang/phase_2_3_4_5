@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 ON_KAGGLE = Path("/kaggle/input").exists()
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]   # src/ -> phase_3/ -> repo root
 
 # ---- inputs ------------------------------------------------------------------
 # unified metadata (split + image-level 14-CheXpert `labels` + which images have a scene graph)
