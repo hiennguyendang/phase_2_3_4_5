@@ -111,6 +111,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--features-root", type=Path, default=config.DEFAULT_FEATURES_ROOT)
     p.add_argument("--split", default="val")
     p.add_argument("--batch", type=int, default=config.BATCH)
+    p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
+                   help="bbox source: detector (default) or gt (oracle ablation)")
     p.add_argument("--device", default="cuda")
     p.add_argument("--concept-f1-thresh", type=float, default=0.30,
                    help="go/no-go bar for concept-from-image macro-F1 (judgment call)")
@@ -127,7 +129,7 @@ def main() -> int:
     m.load_state_dict(ck["model"])
     mode = ck["mode"]
 
-    ds = M3Dataset(args.labels_dir, args.features_root, args.split)
+    ds = M3Dataset(args.labels_dir, args.features_root, args.split, box_source=args.box_source)
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
     print(f"[faithfulness] mode={mode} split={args.split} n={len(ds):,}\n")
 

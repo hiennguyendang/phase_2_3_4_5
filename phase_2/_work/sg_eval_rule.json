@@ -1,0 +1,228 @@
+{
+  "engine": "rule_parser",
+  "n_samples": 22023,
+  "presence_with_region": {
+    "precision": 0.8936,
+    "recall": 0.829,
+    "f1": 0.8601,
+    "tp": 200019,
+    "fp": 23809,
+    "fn": 41256
+  },
+  "presence_finding_only": {
+    "precision": 0.9172,
+    "recall": 0.9304,
+    "f1": 0.9238,
+    "tp": 72172,
+    "fp": 6516,
+    "fn": 5395
+  },
+  "uncertain_with_region": {
+    "precision": 0.8852,
+    "recall": 0.6444,
+    "f1": 0.7459,
+    "tp": 28693,
+    "fp": 3720,
+    "fn": 15833
+  },
+  "localization_gap_f1": 0.0637,
+  "presence_macro_f1": 0.7787,
+  "progression": {
+    "gold_cued_cells": 92063,
+    "coverage": 0.5497,
+    "accuracy_on_covered": 0.8769,
+    "confusion": {
+      "improved->improved": 8810,
+      "improved->stable": 365,
+      "improved->worsened": 606,
+      "stable->improved": 672,
+      "stable->stable": 18960,
+      "stable->worsened": 4047,
+      "worsened->improved": 255,
+      "worsened->stable": 285,
+      "worsened->worsened": 16607
+    }
+  },
+  "per_finding_top": [
+    {
+      "finding": "lung opacity",
+      "precision": 0.9258,
+      "recall": 0.8696,
+      "f1": 0.8968,
+      "tp": 60681,
+      "fp": 4862,
+      "fn": 9103
+    },
+    {
+      "finding": "pleural effusion",
+      "precision": 0.9572,
+      "recall": 0.9218,
+      "f1": 0.9392,
+      "tp": 23436,
+      "fp": 1049,
+      "fn": 1987
+    },
+    {
+      "finding": "atelectasis",
+      "precision": 0.9224,
+      "recall": 0.8466,
+      "f1": 0.8829,
+      "tp": 20178,
+      "fp": 1698,
+      "fn": 3656
+    },
+    {
+      "finding": "pulmonary edema/hazy opacity",
+      "precision": 0.9333,
+      "recall": 0.8266,
+      "f1": 0.8768,
+      "tp": 13008,
+      "fp": 929,
+      "fn": 2728
+    },
+    {
+      "finding": "vascular congestion",
+      "precision": 0.8715,
+      "recall": 0.8425,
+      "f1": 0.8568,
+      "tp": 8544,
+      "fp": 1260,
+      "fn": 1597
+    },
+    {
+      "finding": "pneumonia",
+      "precision": 0.8933,
+      "recall": 0.77,
+      "f1": 0.8271,
+      "tp": 7628,
+      "fp": 911,
+      "fn": 2278
+    },
+    {
+      "finding": "enteric tube",
+      "precision": 0.8628,
+      "recall": 0.9367,
+      "f1": 0.8982,
+      "tp": 5716,
+      "fp": 909,
+      "fn": 386
+    },
+    {
+      "finding": "enlarged cardiac silhouette",
+      "precision": 0.9623,
+      "recall": 0.937,
+      "f1": 0.9495,
+      "tp": 4880,
+      "fp": 191,
+      "fn": 328
+    },
+    {
+      "finding": "consolidation",
+      "precision": 0.9092,
+      "recall": 0.75,
+      "f1": 0.822,
+      "tp": 3787,
+      "fp": 378,
+      "fn": 1262
+    },
+    {
+      "finding": "pleural/parenchymal scarring",
+      "precision": 0.8802,
+      "recall": 0.7879,
+      "f1": 0.8315,
+      "tp": 3202,
+      "fp": 436,
+      "fn": 862
+    },
+    {
+      "finding": "endotracheal tube",
+      "precision": 0.7057,
+      "recall": 0.9032,
+      "f1": 0.7923,
+      "tp": 3469,
+      "fp": 1447,
+      "fn": 372
+    },
+    {
+      "finding": "linear/patchy atelectasis",
+      "precision": 0.8519,
+      "recall": 0.4852,
+      "f1": 0.6183,
+      "tp": 1755,
+      "fp": 305,
+      "fn": 1862
+    },
+    {
+      "finding": "lung lesion",
+      "precision": 0.8027,
+      "recall": 0.6276,
+      "f1": 0.7044,
+      "tp": 2091,
+      "fp": 514,
+      "fn": 1241
+    },
+    {
+      "finding": "aspiration",
+      "precision": 0.9257,
+      "recall": 0.8539,
+      "f1": 0.8884,
+      "tp": 2666,
+      "fp": 214,
+      "fn": 456
+    },
+    {
+      "finding": "cardiac pacer and wires",
+      "precision": 0.7717,
+      "recall": 0.8114,
+      "f1": 0.791,
+      "tp": 2332,
+      "fp": 690,
+      "fn": 542
+    },
+    {
+      "finding": "airspace opacity",
+      "precision": 0.9502,
+      "recall": 0.8241,
+      "f1": 0.8827,
+      "tp": 2253,
+      "fp": 118,
+      "fn": 481
+    },
+    {
+      "finding": "vascular calcification",
+      "precision": 0.9663,
+      "recall": 0.7245,
+      "f1": 0.8281,
+      "tp": 1949,
+      "fp": 68,
+      "fn": 741
+    },
+    {
+      "finding": "lobar/segmental collapse",
+      "precision": 0.9364,
+      "recall": 0.3384,
+      "f1": 0.4971,
+      "tp": 898,
+      "fp": 61,
+      "fn": 1756
+    },
+    {
+      "finding": "tortuous aorta",
+      "precision": 0.8952,
+      "recall": 0.9447,
+      "f1": 0.9193,
+      "tp": 2495,
+      "fp": 292,
+      "fn": 146
+    },
+    {
+      "finding": "picc",
+      "precision": 0.7175,
+      "recall": 0.7429,
+      "f1": 0.73,
+      "tp": 1844,
+      "fp": 726,
+      "fn": 638
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+"pleural effusion": [
+"lung opacity"
+],
+"costophrenic angle blunting": [
+"lung opacity",
+"pleural effusion"
+],
+"lung lesion": [
+"lung opacity"
+],
+"mass/nodule (not otherwise specified)": [
+"lung opacity",
+"lung lesion"
+],
+"pneumonia": [
+"lung opacity"
+],
+"pulmonary edema/hazy opacity": [
+"lung opacity"
+],
+"consolidation": [
+"lung opacity"
+],
+"atelectasis": [
+"lung opacity"
+],
+"vascular congestion": [
+"lung opacity"
+],
+"pleural/parenchymal scarring": [
+"lung opacity"
+],
+"multiple masses/nodules": [
+"lung opacity",
+"lung lesion"
+],
+"increased reticular markings/ild pattern": [
+"lung opacity"
+],
+"aspiration": [
+"lung opacity"
+],
+"lobar/segmental collapse": [
+"lung opacity",
+"atelectasis"
+],
+"bronchiectasis": [
+"lung opacity"
+],
+"airspace opacity": [
+"lung opacity"
+],
+"linear/patchy atelectasis": [
+"lung opacity",
+"atelectasis"
+],
+"hydropneumothorax": [
+"lung opacity",
+"pneumothorax"
+],
+"granulomatous disease": [
+"lung opacity"
+],
+"infiltration": [
+"lung opacity"
+],
+"interstitial lung disease": [
+"lung opacity"
+],
+"alveolar hemorrhage": [
+"lung opacity"
+],
+"lung cancer": [
+"lung opacity"
+]
+}

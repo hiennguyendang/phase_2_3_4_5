@@ -1,0 +1,4314 @@
+{
+ "endotracheal tube": [
+  [
+   "endotracheal",
+   10279,
+   0.975,
+   0.915
+  ],
+  [
+   "carina",
+   9136,
+   0.943,
+   0.993
+  ],
+  [
+   "et tube",
+   7326,
+   1.0,
+   0.961
+  ],
+  [
+   "tube terminates cm",
+   998,
+   0.981,
+   0.999
+  ],
+  [
+   "carinal",
+   974,
+   0.962,
+   0.999
+  ],
+  [
+   "intubated",
+   864,
+   1.0,
+   0.988
+  ],
+  [
+   "ends cm",
+   668,
+   0.933,
+   0.994
+  ],
+  [
+   "tube and nasogastric",
+   415,
+   0.952,
+   0.677
+  ],
+  [
+   "tube projects cm",
+   358,
+   0.994,
+   1.0
+  ],
+  [
+   "tube is cm",
+   336,
+   0.982,
+   1.0
+  ],
+  [
+   "lies approximately cm",
+   215,
+   0.968,
+   1.0
+  ],
+  [
+   "tube cm",
+   209,
+   0.954,
+   0.99
+  ],
+  [
+   "tube terminating cm",
+   184,
+   0.963,
+   0.989
+  ],
+  [
+   "clavicular heads",
+   154,
+   0.939,
+   1.0
+  ],
+  [
+   "position cm",
+   145,
+   0.973,
+   0.993
+  ],
+  [
+   "tube nasogastric",
+   144,
+   0.941,
+   0.861
+  ],
+  [
+   "read pm ett",
+   131,
+   1.0,
+   0.977
+  ],
+  [
+   "impression et",
+   126,
+   1.0,
+   0.992
+  ],
+  [
+   "read pm et",
+   125,
+   1.0,
+   0.976
+  ],
+  [
+   "low lying",
+   107,
+   0.907,
+   0.981
+  ],
+  [
+   "chin down",
+   100,
+   1.0,
+   0.99
+  ],
+  [
+   "tube tip cm",
+   99,
+   1.0,
+   1.0
+  ],
+  [
+   "tube ng",
+   93,
+   0.959,
+   0.817
+  ],
+  [
+   "tube and enteric",
+   89,
+   0.967,
+   0.674
+  ],
+  [
+   "position approximately cm",
+   88,
+   0.978,
+   0.989
+  ]
+ ],
+ "lobar/segmental collapse": [
+  [
+   "collapse",
+   3462,
+   0.996,
+   0.954
+  ],
+  [
+   "collapsed",
+   562,
+   0.998,
+   0.973
+  ]
+ ],
+ "mediastinal displacement": [
+  [
+   "shift",
+   1787,
+   0.954,
+   0.797
+  ],
+  [
+   "deviation",
+   569,
+   0.942,
+   0.995
+  ],
+  [
+   "leftward mediastinal",
+   238,
+   1.0,
+   0.941
+  ],
+  [
+   "rightward mediastinal",
+   144,
+   0.973,
+   0.924
+  ],
+  [
+   "trachea is deviated",
+   62,
+   1.0,
+   1.0
+  ],
+  [
+   "rightward tracheal",
+   61,
+   0.968,
+   1.0
+  ],
+  [
+   "tension pneumothorax",
+   61,
+   1.0,
+   0.82
+  ],
+  [
+   "cardiomediastinum",
+   60,
+   0.938,
+   0.917
+  ],
+  [
+   "midline structures",
+   53,
+   0.946,
+   0.698
+  ]
+ ],
+ "lung opacity": [
+  [
+   "opacity",
+   31581,
+   0.992,
+   0.918
+  ],
+  [
+   "opacities",
+   27899,
+   0.998,
+   0.9
+  ],
+  [
+   "bibasilar",
+   15576,
+   0.993,
+   0.994
+  ],
+  [
+   "interstitial",
+   11699,
+   0.936,
+   0.985
+  ],
+  [
+   "opacification",
+   10844,
+   0.999,
+   0.962
+  ],
+  [
+   "retrocardiac",
+   10415,
+   0.982,
+   0.989
+  ],
+  [
+   "basilar",
+   9245,
+   0.941,
+   0.982
+  ],
+  [
+   "patchy",
+   6736,
+   0.992,
+   0.991
+  ],
+  [
+   "parenchymal",
+   6432,
+   0.929,
+   0.682
+  ],
+  [
+   "linear",
+   5477,
+   0.971,
+   0.989
+  ],
+  [
+   "costophrenic",
+   4846,
+   0.919,
+   0.989
+  ],
+  [
+   "perihilar",
+   4385,
+   0.969,
+   0.984
+  ],
+  [
+   "multifocal",
+   2840,
+   0.984,
+   0.992
+  ],
+  [
+   "streaky",
+   2801,
+   0.995,
+   0.991
+  ],
+  [
+   "nodular",
+   2656,
+   0.911,
+   0.973
+  ],
+  [
+   "loculated",
+   2152,
+   0.918,
+   0.998
+  ],
+  [
+   "hazy",
+   1910,
+   0.994,
+   0.994
+  ],
+  [
+   "asymmetric",
+   1678,
+   0.951,
+   0.989
+  ],
+  [
+   "heterogeneous",
+   1557,
+   0.986,
+   0.988
+  ],
+  [
+   "bibasal",
+   1231,
+   0.996,
+   0.994
+  ],
+  [
+   "opacifications",
+   1193,
+   0.996,
+   0.953
+  ],
+  [
+   "ill-defined",
+   1145,
+   0.96,
+   0.99
+  ],
+  [
+   "alveolar",
+   1125,
+   0.953,
+   0.986
+  ],
+  [
+   "infrahilar",
+   1102,
+   0.973,
+   0.984
+  ],
+  [
+   "fissure",
+   1075,
+   0.903,
+   0.991
+  ]
+ ],
+ "aspiration": [
+  [
+   "aspiration",
+   7829,
+   1.0,
+   0.939
+  ],
+  [
+   "pneumonitis",
+   323,
+   1.0,
+   0.96
+  ],
+  [
+   "aspirated",
+   50,
+   1.0,
+   0.84
+  ]
+ ],
+ "pneumonia": [
+  [
+   "pneumonia",
+   41296,
+   0.983,
+   0.482
+  ],
+  [
+   "infection",
+   8812,
+   0.997,
+   0.903
+  ],
+  [
+   "infectious",
+   3518,
+   0.994,
+   0.866
+  ],
+  [
+   "atypical",
+   676,
+   0.912,
+   0.972
+  ],
+  [
+   "pneumonic",
+   371,
+   1.0,
+   0.763
+  ],
+  [
+   "atelectasis noting",
+   125,
+   0.94,
+   1.0
+  ],
+  [
+   "consolidation compatible",
+   102,
+   0.919,
+   1.0
+  ],
+  [
+   "viral",
+   101,
+   0.902,
+   0.96
+  ],
+  [
+   "seriously",
+   86,
+   0.915,
+   1.0
+  ],
+  [
+   "lobe atelectasis although",
+   79,
+   0.929,
+   1.0
+  ],
+  [
+   "circumstance",
+   57,
+   0.966,
+   0.965
+  ],
+  [
+   "organizing",
+   55,
+   0.982,
+   1.0
+  ],
+  [
+   "bacterial",
+   53,
+   0.981,
+   0.642
+  ],
+  [
+   "pneumocystis",
+   53,
+   0.946,
+   0.943
+  ],
+  [
+   "compatible with multifocal",
+   42,
+   0.977,
+   1.0
+  ]
+ ],
+ "pleural effusion": [
+  [
+   "effusion",
+   108747,
+   0.99,
+   0.391
+  ],
+  [
+   "effusions",
+   32197,
+   1.0,
+   0.68
+  ],
+  [
+   "layering",
+   2709,
+   0.983,
+   0.973
+  ],
+  [
+   "pleural fluid",
+   2300,
+   0.994,
+   0.925
+  ],
+  [
+   "right-sided pleural",
+   1217,
+   0.933,
+   0.896
+  ],
+  [
+   "left-sided pleural",
+   1103,
+   0.942,
+   0.89
+  ],
+  [
+   "loculated pleural",
+   467,
+   0.947,
+   0.991
+  ],
+  [
+   "subpulmonic",
+   325,
+   0.91,
+   0.975
+  ],
+  [
+   "partially loculated",
+   258,
+   0.97,
+   0.988
+  ],
+  [
+   "loculated right pleural",
+   252,
+   0.94,
+   0.996
+  ],
+  [
+   "hemothorax",
+   206,
+   0.963,
+   0.796
+  ],
+  [
+   "pre-existing right pleural",
+   192,
+   0.99,
+   0.854
+  ],
+  [
+   "loculated fluid",
+   187,
+   1.0,
+   0.952
+  ],
+  [
+   "loculation",
+   182,
+   0.989,
+   0.951
+  ],
+  [
+   "small-to-moderate left pleural",
+   178,
+   0.994,
+   0.989
+  ],
+  [
+   "loculated left pleural",
+   174,
+   0.983,
+   0.983
+  ],
+  [
+   "small-to-moderate right pleural",
+   169,
+   0.994,
+   0.982
+  ],
+  [
+   "difference in positioning",
+   146,
+   0.901,
+   1.0
+  ],
+  [
+   "reaccumulation",
+   129,
+   0.915,
+   0.829
+  ],
+  [
+   "residual pleural",
+   129,
+   0.921,
+   0.876
+  ],
+  [
+   "pre-existing left pleural",
+   127,
+   1.0,
+   0.898
+  ],
+  [
+   "pre-existing pleural",
+   123,
+   0.984,
+   0.902
+  ],
+  [
+   "residual left pleural",
+   112,
+   0.941,
+   0.893
+  ],
+  [
+   "small-to-moderate bilateral pleural",
+   111,
+   1.0,
+   1.0
+  ],
+  [
+   "residual right pleural",
+   105,
+   0.991,
+   0.867
+  ]
+ ],
+ "pulmonary edema/hazy opacity": [
+  [
+   "edema",
+   54731,
+   0.996,
+   0.538
+  ],
+  [
+   "interstitial pulmonary",
+   1938,
+   0.934,
+   0.942
+  ],
+  [
+   "indistinctness",
+   916,
+   1.0,
+   0.971
+  ],
+  [
+   "asymmetric pulmonary",
+   637,
+   0.977,
+   0.959
+  ],
+  [
+   "hazy opacification",
+   490,
+   1.0,
+   0.994
+  ],
+  [
+   "hazy opacity",
+   488,
+   0.998,
+   0.994
+  ],
+  [
+   "mild-to-moderate pulmonary",
+   461,
+   0.941,
+   0.987
+  ],
+  [
+   "haziness",
+   420,
+   1.0,
+   0.986
+  ],
+  [
+   "hazy opacities",
+   245,
+   0.992,
+   0.996
+  ],
+  [
+   "moderately severe pulmonary",
+   220,
+   0.987,
+   0.977
+  ],
+  [
+   "vascular blurring",
+   184,
+   1.0,
+   1.0
+  ],
+  [
+   "pre-existing pulmonary",
+   141,
+   0.986,
+   0.901
+  ],
+  [
+   "moderate-to-severe pulmonary",
+   130,
+   0.992,
+   1.0
+  ],
+  [
+   "asymmetrical pulmonary",
+   96,
+   0.99,
+   1.0
+  ],
+  [
+   "borderline interstitial",
+   94,
+   0.989,
+   0.904
+  ],
+  [
+   "cardiogenic",
+   93,
+   0.949,
+   0.828
+  ],
+  [
+   "impression moderate pulmonary",
+   69,
+   0.958,
+   1.0
+  ],
+  [
+   "re-expansion pulmonary",
+   59,
+   1.0,
+   0.932
+  ],
+  [
+   "pulmonary and interstitial",
+   59,
+   1.0,
+   0.966
+  ],
+  [
+   "noncardiogenic",
+   54,
+   0.947,
+   0.944
+  ],
+  [
+   "resolving pulmonary",
+   47,
+   0.904,
+   0.979
+  ],
+  [
+   "dependent pulmonary",
+   45,
+   1.0,
+   0.956
+  ],
+  [
+   "alveolar pulmonary",
+   43,
+   0.915,
+   1.0
+  ]
+ ],
+ "copd/emphysema": [
+  [
+   "copd",
+   1792,
+   0.993,
+   0.979
+  ],
+  [
+   "emphysematous",
+   440,
+   1.0,
+   0.995
+  ],
+  [
+   "chronic lung disease",
+   400,
+   0.995,
+   0.968
+  ],
+  [
+   "chronic obstructive",
+   366,
+   0.995,
+   0.992
+  ],
+  [
+   "obstructive pulmonary",
+   338,
+   1.0,
+   0.994
+  ],
+  [
+   "pulmonary emphysema",
+   102,
+   0.981,
+   0.99
+  ],
+  [
+   "compatible with emphysema",
+   70,
+   1.0,
+   1.0
+  ],
+  [
+   "predominant emphysema",
+   63,
+   1.0,
+   0.984
+  ],
+  [
+   "hyperinflated compatible",
+   61,
+   0.968,
+   1.0
+  ],
+  [
+   "hyperinflated suggesting chronic",
+   59,
+   0.983,
+   1.0
+  ],
+  [
+   "wall emphysema",
+   58,
+   1.0,
+   0.897
+  ],
+  [
+   "lobe lucency",
+   52,
+   0.929,
+   1.0
+  ],
+  [
+   "diaphragms suggesting chronic",
+   50,
+   0.962,
+   1.0
+  ],
+  [
+   "suggests emphysema",
+   47,
+   1.0,
+   1.0
+  ],
+  [
+   "impression emphysema",
+   40,
+   1.0,
+   1.0
+  ]
+ ],
+ "hyperaeration": [
+  [
+   "hyperinflated",
+   4247,
+   1.0,
+   0.981
+  ],
+  [
+   "hyperinflation",
+   1270,
+   1.0,
+   0.991
+  ],
+  [
+   "flattening",
+   765,
+   0.947,
+   0.99
+  ],
+  [
+   "hyperexpanded",
+   632,
+   1.0,
+   0.989
+  ],
+  [
+   "hyperexpansion",
+   611,
+   1.0,
+   0.992
+  ],
+  [
+   "overinflation",
+   340,
+   1.0,
+   0.894
+  ],
+  [
+   "flattened",
+   285,
+   0.966,
+   0.989
+  ],
+  [
+   "overinflated",
+   113,
+   1.0,
+   0.982
+  ]
+ ],
+ "atelectasis": [
+  [
+   "atelectasis",
+   61180,
+   0.999,
+   0.981
+  ],
+  [
+   "atelectatic",
+   2463,
+   1.0,
+   0.969
+  ],
+  [
+   "compressive",
+   2372,
+   0.998,
+   0.995
+  ],
+  [
+   "platelike",
+   585,
+   0.962,
+   0.973
+  ],
+  [
+   "atelectases",
+   357,
+   1.0,
+   0.994
+  ],
+  [
+   "plate-like",
+   338,
+   0.983,
+   0.985
+  ],
+  [
+   "patchy and linear",
+   257,
+   0.97,
+   1.0
+  ],
+  [
+   "linear bibasilar",
+   252,
+   0.92,
+   0.992
+  ],
+  [
+   "streaks",
+   213,
+   0.951,
+   0.981
+  ],
+  [
+   "bibasilar linear",
+   201,
+   0.976,
+   0.985
+  ],
+  [
+   "effusions with bibasilar",
+   182,
+   0.963,
+   1.0
+  ],
+  [
+   "effusion with subsequent",
+   178,
+   0.967,
+   1.0
+  ],
+  [
+   "low with bibasilar",
+   150,
+   0.962,
+   1.0
+  ],
+  [
+   "partial lower lobe",
+   149,
+   1.0,
+   0.993
+  ],
+  [
+   "bibasilar opacities most",
+   144,
+   0.954,
+   0.993
+  ],
+  [
+   "streak",
+   143,
+   0.911,
+   0.937
+  ],
+  [
+   "bases without focal",
+   140,
+   0.927,
+   0.993
+  ],
+  [
+   "bases most",
+   119,
+   0.902,
+   0.983
+  ],
+  [
+   "linear left basilar",
+   119,
+   0.908,
+   0.975
+  ],
+  [
+   "streaky linear",
+   118,
+   0.983,
+   1.0
+  ],
+  [
+   "lung linear",
+   104,
+   0.929,
+   0.981
+  ],
+  [
+   "lobe linear",
+   96,
+   0.95,
+   1.0
+  ],
+  [
+   "effusion and bibasilar",
+   93,
+   0.903,
+   0.978
+  ],
+  [
+   "cardiomegaly with retrocardiac",
+   90,
+   0.978,
+   1.0
+  ],
+  [
+   "effusions with subsequent",
+   83,
+   0.988,
+   1.0
+  ]
+ ],
+ "cabg grafts": [
+  [
+   "cabg",
+   1838,
+   1.0,
+   0.998
+  ],
+  [
+   "bypass",
+   398,
+   1.0,
+   0.997
+  ],
+  [
+   "graft surgery",
+   169,
+   1.0,
+   1.0
+  ],
+  [
+   "post coronary",
+   133,
+   1.0,
+   1.0
+  ],
+  [
+   "sternotomy and coronary",
+   111,
+   1.0,
+   1.0
+  ],
+  [
+   "cardiac surgery",
+   85,
+   1.0,
+   1.0
+  ],
+  [
+   "grafting",
+   47,
+   0.979,
+   1.0
+  ]
+ ],
+ "spinal degenerative changes": [
+  [
+   "multilevel",
+   942,
+   0.949,
+   1.0
+  ],
+  [
+   "osteophytes",
+   347,
+   0.964,
+   1.0
+  ],
+  [
+   "bridging",
+   89,
+   0.927,
+   1.0
+  ],
+  [
+   "spine with anterior",
+   60,
+   1.0,
+   1.0
+  ],
+  [
+   "some degenerative",
+   59,
+   0.937,
+   1.0
+  ],
+  [
+   "imaged thoracic spine",
+   58,
+   0.921,
+   1.0
+  ],
+  [
+   "degenerative disease",
+   56,
+   1.0,
+   0.964
+  ],
+  [
+   "flowing",
+   52,
+   0.912,
+   1.0
+  ],
+  [
+   "anterior osteophyte",
+   52,
+   0.963,
+   1.0
+  ],
+  [
+   "mild-to-moderate degenerative",
+   42,
+   0.977,
+   1.0
+  ],
+  [
+   "degenerative changes throughout",
+   42,
+   0.977,
+   1.0
+  ]
+ ],
+ "enteric tube": [
+  [
+   "nasogastric",
+   7599,
+   1.0,
+   0.856
+  ],
+  [
+   "ng tube",
+   5348,
+   1.0,
+   0.931
+  ],
+  [
+   "enteric",
+   3207,
+   0.905,
+   0.927
+  ],
+  [
+   "feeding",
+   2489,
+   0.996,
+   0.91
+  ],
+  [
+   "dobbhoff",
+   1935,
+   1.0,
+   0.933
+  ],
+  [
+   "tube passes",
+   1123,
+   0.903,
+   1.0
+  ],
+  [
+   "ge junction",
+   1074,
+   0.985,
+   0.995
+  ],
+  [
+   "tube courses",
+   989,
+   0.992,
+   0.997
+  ],
+  [
+   "orogastric",
+   912,
+   1.0,
+   0.947
+  ],
+  [
+   "dobhoff",
+   772,
+   0.999,
+   0.943
+  ],
+  [
+   "gastroesophageal",
+   659,
+   0.908,
+   0.983
+  ],
+  [
+   "fundus",
+   590,
+   0.961,
+   0.985
+  ],
+  [
+   "proximal stomach",
+   514,
+   1.0,
+   0.992
+  ],
+  [
+   "distal esophagus",
+   499,
+   0.965,
+   0.996
+  ],
+  [
+   "distal stomach",
+   398,
+   0.988,
+   1.0
+  ],
+  [
+   "hole",
+   287,
+   0.917,
+   1.0
+  ],
+  [
+   "duodenum",
+   285,
+   0.983,
+   0.989
+  ],
+  [
+   "tube is coiled",
+   243,
+   0.972,
+   0.996
+  ],
+  [
+   "og tube",
+   238,
+   1.0,
+   0.958
+  ],
+  [
+   "nasoenteric",
+   200,
+   1.0,
+   0.98
+  ],
+  [
+   "pylorus",
+   192,
+   0.975,
+   0.995
+  ],
+  [
+   "diaphragm and out",
+   187,
+   0.979,
+   0.995
+  ],
+  [
+   "gastric body",
+   178,
+   0.994,
+   0.989
+  ],
+  [
+   "junction and should",
+   175,
+   0.978,
+   0.994
+  ],
+  [
+   "diaphragm off",
+   169,
+   0.994,
+   1.0
+  ]
+ ],
+ "picc": [
+  [
+   "picc",
+   10137,
+   1.0,
+   0.91
+  ],
+  [
+   "pic line",
+   1631,
+   1.0,
+   0.981
+  ],
+  [
+   "extremity",
+   248,
+   0.943,
+   0.903
+  ],
+  [
+   "dx chest portable",
+   106,
+   1.0,
+   1.0
+  ],
+  [
+   "line can",
+   69,
+   0.92,
+   0.986
+  ]
+ ],
+ "enlarged cardiac silhouette": [
+  [
+   "cardiomegaly",
+   24538,
+   1.0,
+   0.978
+  ],
+  [
+   "moderately enlarged",
+   2096,
+   0.996,
+   0.999
+  ],
+  [
+   "silhouette is enlarged",
+   1105,
+   0.999,
+   1.0
+  ],
+  [
+   "continued enlargement",
+   852,
+   0.995,
+   1.0
+  ],
+  [
+   "cardiac enlargement",
+   704,
+   1.0,
+   0.913
+  ],
+  [
+   "heart is moderately",
+   637,
+   0.992,
+   1.0
+  ],
+  [
+   "enlarged cardiac",
+   566,
+   1.0,
+   0.991
+  ],
+  [
+   "borderline enlarged",
+   462,
+   0.994,
+   0.994
+  ],
+  [
+   "substantial enlargement",
+   405,
+   0.978,
+   0.995
+  ],
+  [
+   "silhouette remains enlarged",
+   373,
+   1.0,
+   1.0
+  ],
+  [
+   "heart is enlarged",
+   369,
+   1.0,
+   0.997
+  ],
+  [
+   "enlargement of cardiac",
+   319,
+   0.997,
+   1.0
+  ],
+  [
+   "heart remains enlarged",
+   309,
+   1.0,
+   1.0
+  ],
+  [
+   "stably enlarged",
+   307,
+   0.997,
+   0.997
+  ],
+  [
+   "enlarged heart",
+   272,
+   1.0,
+   0.985
+  ],
+  [
+   "severely enlarged",
+   247,
+   0.939,
+   1.0
+  ],
+  [
+   "silhouette with pulmonary",
+   222,
+   0.996,
+   1.0
+  ],
+  [
+   "silhouette is moderately",
+   219,
+   0.995,
+   1.0
+  ],
+  [
+   "markedly enlarged",
+   179,
+   0.942,
+   0.994
+  ],
+  [
+   "despite the projection",
+   150,
+   1.0,
+   0.587
+  ],
+  [
+   "atrial enlargement",
+   147,
+   1.0,
+   0.939
+  ],
+  [
+   "ventricular predominance",
+   138,
+   1.0,
+   0.862
+  ],
+  [
+   "globular",
+   129,
+   1.0,
+   0.992
+  ],
+  [
+   "heart remains moderately",
+   128,
+   1.0,
+   1.0
+  ],
+  [
+   "silhouette with some",
+   111,
+   0.991,
+   1.0
+  ]
+ ],
+ "fluid overload/heart failure": [
+  [
+   "overload",
+   2733,
+   0.997,
+   0.935
+  ],
+  [
+   "heart failure",
+   1033,
+   0.993,
+   0.703
+  ],
+  [
+   "congestive heart",
+   655,
+   0.995,
+   0.666
+  ],
+  [
+   "decompensation",
+   631,
+   0.947,
+   0.634
+  ],
+  [
+   "kerley",
+   118,
+   1.0,
+   0.975
+  ],
+  [
+   "doubt overt",
+   67,
+   1.0,
+   1.0
+  ],
+  [
+   "congestive failure",
+   67,
+   1.0,
+   0.746
+  ],
+  [
+   "chf with interstitial",
+   67,
+   1.0,
+   1.0
+  ],
+  [
+   "decompensated",
+   61,
+   0.984,
+   0.754
+  ],
+  [
+   "slight fluid",
+   42,
+   0.955,
+   0.976
+  ],
+  [
+   "doubt chf",
+   41,
+   1.0,
+   1.0
+  ]
+ ],
+ "ij line": [
+  [
+   "jugular",
+   6147,
+   0.925,
+   0.915
+  ],
+  [
+   "internal",
+   4971,
+   0.92,
+   0.901
+  ],
+  [
+   "ij catheter",
+   1355,
+   0.999,
+   0.87
+  ],
+  [
+   "ij central",
+   1228,
+   0.99,
+   0.897
+  ],
+  [
+   "vein catheter",
+   718,
+   0.956,
+   0.759
+  ],
+  [
+   "ij line",
+   578,
+   1.0,
+   0.87
+  ],
+  [
+   "ij sheath",
+   165,
+   1.0,
+   0.667
+  ],
+  [
+   "right-sided ij",
+   93,
+   0.921,
+   0.892
+  ],
+  [
+   "cordis",
+   61,
+   0.924,
+   0.77
+  ],
+  [
+   "sheath ends",
+   46,
+   0.979,
+   1.0
+  ]
+ ],
+ "bronchiectasis": [
+  [
+   "bronchiectasis",
+   804,
+   1.0,
+   0.988
+  ]
+ ],
+ "airspace opacity": [
+  [
+   "parenchymal opacities",
+   3806,
+   0.998,
+   0.63
+  ],
+  [
+   "airspace opacities",
+   2005,
+   0.995,
+   0.978
+  ],
+  [
+   "parenchymal opacity",
+   965,
+   0.998,
+   0.701
+  ],
+  [
+   "airspace opacity",
+   754,
+   0.993,
+   0.759
+  ],
+  [
+   "bibasilar airspace",
+   739,
+   0.983,
+   0.992
+  ],
+  [
+   "alveolar opacities",
+   349,
+   0.994,
+   0.983
+  ],
+  [
+   "pre-existing parenchymal",
+   287,
+   0.96,
+   0.843
+  ],
+  [
+   "basal parenchymal",
+   178,
+   0.922,
+   0.966
+  ],
+  [
+   "airspace opacification",
+   173,
+   1.0,
+   0.902
+  ],
+  [
+   "airspace disease",
+   154,
+   0.994,
+   0.981
+  ],
+  [
+   "patchy airspace",
+   148,
+   0.967,
+   0.993
+  ],
+  [
+   "retrocardiac airspace",
+   79,
+   0.975,
+   1.0
+  ],
+  [
+   "multifocal parenchymal",
+   75,
+   0.949,
+   0.987
+  ],
+  [
+   "perihilar airspace",
+   65,
+   0.985,
+   1.0
+  ],
+  [
+   "perihilar parenchymal",
+   61,
+   0.984,
+   0.902
+  ],
+  [
+   "pre-existing bilateral parenchymal",
+   61,
+   0.938,
+   0.951
+  ],
+  [
+   "lung airspace",
+   57,
+   0.919,
+   0.982
+  ],
+  [
+   "basilar airspace",
+   54,
+   1.0,
+   0.944
+  ],
+  [
+   "alveolar opacity",
+   43,
+   1.0,
+   0.977
+  ]
+ ],
+ "pleural/parenchymal scarring": [
+  [
+   "scarring",
+   5706,
+   0.994,
+   0.987
+  ],
+  [
+   "thickening",
+   4240,
+   0.992,
+   0.983
+  ],
+  [
+   "fibrotic",
+   498,
+   1.0,
+   0.966
+  ],
+  [
+   "biapical pleural",
+   412,
+   0.958,
+   0.998
+  ],
+  [
+   "scar",
+   396,
+   1.0,
+   0.977
+  ],
+  [
+   "bronchial wall",
+   359,
+   0.976,
+   0.997
+  ],
+  [
+   "effusion or pleural",
+   162,
+   0.964,
+   0.994
+  ],
+  [
+   "scars",
+   80,
+   1.0,
+   0.925
+  ],
+  [
+   "formations",
+   70,
+   1.0,
+   0.986
+  ],
+  [
+   "effusion versus pleural",
+   67,
+   0.971,
+   1.0
+  ],
+  [
+   "each lung apex",
+   41,
+   0.976,
+   1.0
+  ],
+  [
+   "effusions or pleural",
+   40,
+   0.952,
+   1.0
+  ]
+ ],
+ "mass/nodule (not otherwise specified)": [
+  [
+   "mass",
+   3002,
+   0.931,
+   0.897
+  ],
+  [
+   "lobe nodule",
+   238,
+   0.941,
+   0.958
+  ],
+  [
+   "tumor",
+   232,
+   0.935,
+   0.953
+  ],
+  [
+   "neoplasm",
+   116,
+   0.975,
+   0.94
+  ],
+  [
+   "cavitary lesion",
+   98,
+   0.97,
+   0.929
+  ],
+  [
+   "lobe pulmonary nodule",
+   91,
+   0.968,
+   0.956
+  ],
+  [
+   "thyroid nodule",
+   76,
+   0.987,
+   1.0
+  ],
+  [
+   "lobe lesion",
+   73,
+   0.973,
+   0.932
+  ],
+  [
+   "lobe lung nodule",
+   54,
+   0.915,
+   0.907
+  ],
+  [
+   "pulmonary lesion",
+   52,
+   0.929,
+   0.827
+  ]
+ ],
+ "chest port": [
+  [
+   "port-a-cath",
+   3477,
+   0.994,
+   0.98
+  ],
+  [
+   "infusion",
+   408,
+   0.921,
+   0.998
+  ],
+  [
+   "wall port",
+   339,
+   1.0,
+   0.991
+  ],
+  [
+   "port ends",
+   245,
+   0.984,
+   1.0
+  ],
+  [
+   "port catheter",
+   210,
+   1.0,
+   0.995
+  ],
+  [
+   "port line",
+   157,
+   1.0,
+   1.0
+  ],
+  [
+   "line tube",
+   149,
+   1.0,
+   1.0
+  ],
+  [
+   "plcmt",
+   142,
+   1.0,
+   1.0
+  ],
+  [
+   "dx chest port",
+   142,
+   1.0,
+   1.0
+  ],
+  [
+   "wall with catheter",
+   102,
+   0.99,
+   1.0
+  ],
+  [
+   "cath",
+   74,
+   0.937,
+   1.0
+  ],
+  [
+   "mediport",
+   65,
+   1.0,
+   1.0
+  ],
+  [
+   "accessed",
+   64,
+   0.97,
+   1.0
+  ],
+  [
+   "right-sided port",
+   56,
+   0.982,
+   0.964
+  ]
+ ],
+ "vascular congestion": [
+  [
+   "congestion",
+   19423,
+   0.99,
+   0.648
+  ],
+  [
+   "pulmonary vascular",
+   11240,
+   0.907,
+   0.801
+  ],
+  [
+   "engorgement",
+   3274,
+   0.97,
+   0.886
+  ],
+  [
+   "bronchovascular",
+   2956,
+   0.924,
+   0.994
+  ],
+  [
+   "plethora",
+   467,
+   0.963,
+   0.985
+  ],
+  [
+   "central vascular",
+   343,
+   0.953,
+   0.81
+  ],
+  [
+   "low resulting",
+   179,
+   0.909,
+   1.0
+  ],
+  [
+   "vascular prominence",
+   148,
+   0.974,
+   0.993
+  ],
+  [
+   "vasculature is engorged",
+   142,
+   0.934,
+   1.0
+  ],
+  [
+   "engorged pulmonary",
+   113,
+   0.974,
+   0.991
+  ],
+  [
+   "lung volumes cause",
+   107,
+   0.947,
+   1.0
+  ],
+  [
+   "lung volumes result",
+   101,
+   0.953,
+   1.0
+  ],
+  [
+   "congestive pattern",
+   91,
+   1.0,
+   0.692
+  ],
+  [
+   "edema and vascular",
+   70,
+   0.986,
+   0.843
+  ],
+  [
+   "present without overt",
+   58,
+   0.921,
+   1.0
+  ],
+  [
+   "lung volumes results",
+   57,
+   0.966,
+   1.0
+  ],
+  [
+   "indistinctness of engorged",
+   57,
+   0.966,
+   1.0
+  ],
+  [
+   "low leading",
+   53,
+   1.0,
+   1.0
+  ],
+  [
+   "cardiomegaly with hilar",
+   53,
+   0.981,
+   1.0
+  ],
+  [
+   "interstitial fluid",
+   45,
+   1.0,
+   0.956
+  ],
+  [
+   "pulmonary congestive",
+   45,
+   0.957,
+   0.756
+  ],
+  [
+   "structures without overt",
+   45,
+   1.0,
+   1.0
+  ],
+  [
+   "cardiomegaly and central",
+   40,
+   0.952,
+   1.0
+  ]
+ ],
+ "tracheostomy tube": [
+  [
+   "tracheostomy",
+   3310,
+   1.0,
+   0.961
+  ],
+  [
+   "tube midline",
+   115,
+   0.975,
+   1.0
+  ],
+  [
+   "tube is midline",
+   61,
+   1.0,
+   1.0
+  ]
+ ],
+ "tortuous aorta": [
+  [
+   "tortuous",
+   5204,
+   0.978,
+   0.945
+  ],
+  [
+   "tortuosity",
+   2266,
+   0.985,
+   0.875
+  ],
+  [
+   "unfolded",
+   937,
+   0.997,
+   0.946
+  ],
+  [
+   "elongation",
+   603,
+   0.992,
+   0.985
+  ],
+  [
+   "unfolding",
+   432,
+   0.989,
+   0.887
+  ],
+  [
+   "elongated",
+   172,
+   0.961,
+   0.936
+  ],
+  [
+   "aorta is somewhat",
+   80,
+   0.988,
+   0.975
+  ],
+  [
+   "aorta is moderately",
+   59,
+   0.908,
+   1.0
+  ],
+  [
+   "aorta is markedly",
+   46,
+   0.958,
+   1.0
+  ]
+ ],
+ "shoulder osteoarthritis": [
+  [
+   "glenohumeral",
+   448,
+   0.926,
+   1.0
+  ],
+  [
+   "joints",
+   365,
+   0.917,
+   1.0
+  ],
+  [
+   "arthropathy",
+   74,
+   0.974,
+   1.0
+  ]
+ ],
+ "vascular calcification": [
+  [
+   "atherosclerotic",
+   1604,
+   1.0,
+   0.998
+  ],
+  [
+   "aorta is calcified",
+   615,
+   1.0,
+   1.0
+  ],
+  [
+   "calcified and tortuous",
+   446,
+   0.998,
+   1.0
+  ],
+  [
+   "knob is calcified",
+   355,
+   1.0,
+   1.0
+  ],
+  [
+   "diffusely calcified",
+   294,
+   1.0,
+   1.0
+  ],
+  [
+   "tortuous and calcified",
+   232,
+   1.0,
+   1.0
+  ],
+  [
+   "arch calcifications",
+   228,
+   1.0,
+   0.996
+  ],
+  [
+   "knob calcifications",
+   217,
+   1.0,
+   1.0
+  ],
+  [
+   "aortic calcifications",
+   206,
+   1.0,
+   0.995
+  ],
+  [
+   "annular",
+   199,
+   0.98,
+   1.0
+  ],
+  [
+   "annulus",
+   194,
+   0.975,
+   1.0
+  ],
+  [
+   "heavily",
+   140,
+   0.921,
+   1.0
+  ],
+  [
+   "tortuous and diffusely",
+   140,
+   1.0,
+   1.0
+  ],
+  [
+   "atherosclerosis",
+   135,
+   1.0,
+   1.0
+  ],
+  [
+   "aorta is diffusely",
+   132,
+   0.936,
+   1.0
+  ],
+  [
+   "arch is calcified",
+   103,
+   1.0,
+   1.0
+  ],
+  [
+   "aortic calcification",
+   102,
+   1.0,
+   1.0
+  ],
+  [
+   "vascular calcifications",
+   89,
+   1.0,
+   1.0
+  ],
+  [
+   "knob calcification",
+   82,
+   1.0,
+   0.988
+  ],
+  [
+   "calcified aorta",
+   75,
+   1.0,
+   1.0
+  ],
+  [
+   "calcified aortic",
+   75,
+   1.0,
+   0.987
+  ],
+  [
+   "tortuous and demonstrates",
+   71,
+   0.986,
+   1.0
+  ],
+  [
+   "dense mitral",
+   70,
+   1.0,
+   1.0
+  ],
+  [
+   "aorta remains calcified",
+   45,
+   1.0,
+   1.0
+  ]
+ ],
+ "chest tube": [
+  [
+   "drainage catheter",
+   668,
+   0.994,
+   0.81
+  ],
+  [
+   "right-sided chest tube",
+   643,
+   1.0,
+   0.726
+  ],
+  [
+   "pleural drain",
+   593,
+   0.998,
+   0.739
+  ],
+  [
+   "left-sided chest tube",
+   590,
+   1.0,
+   0.722
+  ],
+  [
+   "pleural tube",
+   335,
+   1.0,
+   0.749
+  ],
+  [
+   "thoracostomy",
+   284,
+   0.94,
+   0.771
+  ],
+  [
+   "pleurx",
+   283,
+   1.0,
+   0.876
+  ],
+  [
+   "pleural drains",
+   175,
+   1.0,
+   0.794
+  ],
+  [
+   "basilar chest tube",
+   166,
+   1.0,
+   0.849
+  ],
+  [
+   "right-sided chest tubes",
+   137,
+   1.0,
+   0.847
+  ],
+  [
+   "apical chest tube",
+   122,
+   1.0,
+   0.902
+  ],
+  [
+   "left-sided chest tubes",
+   110,
+   1.0,
+   0.718
+  ],
+  [
+   "post chest tube",
+   87,
+   1.0,
+   0.379
+  ],
+  [
+   "drainage catheters",
+   75,
+   0.987,
+   0.92
+  ],
+  [
+   "two chest tubes",
+   68,
+   1.0,
+   0.926
+  ],
+  [
+   "pleural tubes",
+   66,
+   1.0,
+   0.773
+  ],
+  [
+   "basal chest tube",
+   63,
+   1.0,
+   0.905
+  ],
+  [
+   "waterseal",
+   56,
+   0.933,
+   0.911
+  ],
+  [
+   "tubes are present",
+   42,
+   0.913,
+   1.0
+  ]
+ ],
+ "pneumothorax": [
+  [
+   "apical pneumothorax",
+   4300,
+   0.998,
+   0.913
+  ],
+  [
+   "right-sided pneumothorax",
+   296,
+   1.0,
+   0.72
+  ],
+  [
+   "left-sided pneumothorax",
+   220,
+   1.0,
+   0.645
+  ],
+  [
+   "lateral pneumothorax",
+   200,
+   1.0,
+   0.99
+  ],
+  [
+   "residual pneumothorax",
+   195,
+   1.0,
+   0.528
+  ],
+  [
+   "basilar pneumothorax",
+   173,
+   0.989,
+   0.942
+  ],
+  [
+   "basal pneumothorax",
+   157,
+   1.0,
+   0.962
+  ],
+  [
+   "pneumothorax status",
+   131,
+   1.0,
+   0.481
+  ],
+  [
+   "pneumothorax persists",
+   123,
+   1.0,
+   1.0
+  ],
+  [
+   "apicolateral pneumothorax",
+   72,
+   1.0,
+   0.986
+  ],
+  [
+   "medial pneumothorax",
+   58,
+   1.0,
+   1.0
+  ],
+  [
+   "pneumothorax measuring",
+   58,
+   1.0,
+   1.0
+  ],
+  [
+   "apical pneumothoraces",
+   56,
+   1.0,
+   0.893
+  ],
+  [
+   "pneumothorax has minimally",
+   55,
+   1.0,
+   1.0
+  ],
+  [
+   "residual right apical",
+   49,
+   1.0,
+   0.939
+  ],
+  [
+   "apical right pneumothorax",
+   46,
+   1.0,
+   0.978
+  ],
+  [
+   "anterior pneumothorax",
+   45,
+   1.0,
+   0.911
+  ],
+  [
+   "pneumothorax despite",
+   42,
+   1.0,
+   0.952
+  ],
+  [
+   "pneumothorax remaining",
+   42,
+   1.0,
+   0.905
+  ],
+  [
+   "biapical pneumothoraces",
+   42,
+   1.0,
+   0.905
+  ],
+  [
+   "pneumothorax with apical",
+   41,
+   1.0,
+   0.976
+  ]
+ ],
+ "rib fracture": [
+  [
+   "right-sided rib",
+   425,
+   0.982,
+   0.984
+  ],
+  [
+   "dedicated rib",
+   406,
+   0.944,
+   0.768
+  ],
+  [
+   "left-sided rib",
+   400,
+   0.973,
+   0.978
+  ],
+  [
+   "rib series",
+   363,
+   0.953,
+   0.752
+  ],
+  [
+   "rib deformities",
+   306,
+   1.0,
+   1.0
+  ],
+  [
+   "healed rib",
+   265,
+   0.996,
+   0.985
+  ],
+  [
+   "multiple old",
+   181,
+   0.984,
+   1.0
+  ],
+  [
+   "nondisplaced",
+   156,
+   0.94,
+   0.801
+  ],
+  [
+   "multiple rib",
+   149,
+   0.968,
+   0.993
+  ],
+  [
+   "minimally displaced",
+   118,
+   0.908,
+   1.0
+  ],
+  [
+   "old right-sided",
+   113,
+   0.991,
+   1.0
+  ],
+  [
+   "healed right rib",
+   108,
+   1.0,
+   0.991
+  ],
+  [
+   "rib fracture dedicated",
+   102,
+   1.0,
+   0.931
+  ],
+  [
+   "multiple right-sided",
+   90,
+   0.918,
+   1.0
+  ],
+  [
+   "old left-sided",
+   80,
+   1.0,
+   1.0
+  ],
+  [
+   "rib deformity",
+   78,
+   1.0,
+   0.987
+  ],
+  [
+   "multiple healed",
+   73,
+   0.973,
+   0.986
+  ],
+  [
+   "healed left rib",
+   67,
+   1.0,
+   0.985
+  ],
+  [
+   "sided rib",
+   63,
+   1.0,
+   0.984
+  ],
+  [
+   "multiple left rib",
+   62,
+   0.984,
+   0.984
+  ],
+  [
+   "multiple right rib",
+   57,
+   1.0,
+   1.0
+  ],
+  [
+   "multiple bilateral rib",
+   56,
+   1.0,
+   0.982
+  ],
+  [
+   "remote right-sided",
+   54,
+   1.0,
+   1.0
+  ],
+  [
+   "rib fracture consider",
+   54,
+   1.0,
+   0.981
+  ],
+  [
+   "remote left-sided",
+   53,
+   1.0,
+   1.0
+  ]
+ ],
+ "swan-ganz catheter": [
+  [
+   "swan-ganz",
+   1924,
+   0.999,
+   0.82
+  ],
+  [
+   "proximal right pulmonary",
+   62,
+   0.984,
+   0.984
+  ],
+  [
+   "ventricular outflow",
+   52,
+   0.945,
+   1.0
+  ],
+  [
+   "descending pulmonary",
+   46,
+   0.92,
+   0.978
+  ],
+  [
+   "pulmonic valve",
+   45,
+   0.978,
+   1.0
+  ],
+  [
+   "ganz",
+   42,
+   0.977,
+   0.857
+  ],
+  [
+   "lobe pulmonary artery",
+   42,
+   0.977,
+   1.0
+  ]
+ ],
+ "mediastinal drain": [
+  [
+   "mediastinal drains",
+   266,
+   1.0,
+   0.568
+  ],
+  [
+   "mediastinal drain",
+   108,
+   0.982,
+   0.667
+  ],
+  [
+   "tube and mediastinal",
+   47,
+   0.904,
+   0.426
+  ],
+  [
+   "midline drains",
+   45,
+   1.0,
+   0.689
+  ],
+  [
+   "tubes and mediastinal",
+   42,
+   1.0,
+   0.548
+  ]
+ ],
+ "mediastinal widening": [
+  [
+   "mediastinal widening",
+   1022,
+   1.0,
+   0.47
+  ],
+  [
+   "widened mediastinum",
+   502,
+   1.0,
+   0.968
+  ],
+  [
+   "aneurysm",
+   323,
+   1.0,
+   0.929
+  ],
+  [
+   "aneurysmal",
+   148,
+   1.0,
+   0.5
+  ],
+  [
+   "cardiomegaly and widened",
+   126,
+   1.0,
+   1.0
+  ],
+  [
+   "postoperative widening",
+   85,
+   0.904,
+   0.965
+  ],
+  [
+   "widening mediastinum",
+   79,
+   1.0,
+   0.987
+  ],
+  [
+   "apparent widening",
+   75,
+   0.949,
+   0.987
+  ],
+  [
+   "mediastinum is widened",
+   73,
+   1.0,
+   0.973
+  ]
+ ],
+ "linear/patchy atelectasis": [
+  [
+   "subsegmental",
+   1437,
+   0.926,
+   0.992
+  ],
+  [
+   "linear opacities",
+   1244,
+   0.955,
+   0.99
+  ],
+  [
+   "linear opacity",
+   862,
+   0.957,
+   0.985
+  ],
+  [
+   "platelike atelectasis",
+   508,
+   0.981,
+   0.97
+  ],
+  [
+   "patchy atelectasis",
+   316,
+   0.981,
+   0.997
+  ],
+  [
+   "plate-like atelectasis",
+   283,
+   0.986,
+   0.982
+  ],
+  [
+   "basilar linear",
+   88,
+   0.907,
+   0.92
+  ],
+  [
+   "band of atelectasis",
+   84,
+   0.966,
+   0.976
+  ],
+  [
+   "bibasilar linear atelectasis",
+   69,
+   0.986,
+   0.971
+  ]
+ ],
+ "enlarged hilum": [
+  [
+   "lymphadenopathy",
+   1484,
+   0.999,
+   0.834
+  ],
+  [
+   "central pulmonary",
+   1177,
+   0.928,
+   0.982
+  ],
+  [
+   "adenopathy",
+   836,
+   1.0,
+   0.718
+  ],
+  [
+   "hilar prominence",
+   224,
+   0.991,
+   0.978
+  ],
+  [
+   "hilar enlargement",
+   186,
+   1.0,
+   0.957
+  ],
+  [
+   "perihilar vascular",
+   176,
+   0.926,
+   0.972
+  ],
+  [
+   "hilar lymph",
+   165,
+   1.0,
+   0.909
+  ],
+  [
+   "mediastinal lymph",
+   97,
+   0.915,
+   0.959
+  ],
+  [
+   "hilar fullness",
+   83,
+   0.988,
+   0.988
+  ],
+  [
+   "perihilar fullness",
+   77,
+   1.0,
+   0.987
+  ],
+  [
+   "pulmonary hila",
+   75,
+   0.926,
+   0.947
+  ],
+  [
+   "enlarged pulmonary arteries",
+   73,
+   1.0,
+   0.986
+  ],
+  [
+   "central vasculature",
+   49,
+   0.925,
+   0.959
+  ],
+  [
+   "hilar nodes",
+   47,
+   1.0,
+   0.979
+  ],
+  [
+   "central hilar",
+   44,
+   0.957,
+   0.955
+  ]
+ ],
+ "hydropneumothorax": [
+  [
+   "hydropneumothorax",
+   537,
+   1.0,
+   0.961
+  ],
+  [
+   "hydro",
+   236,
+   0.979,
+   0.966
+  ],
+  [
+   "loculated pneumothorax",
+   98,
+   1.0,
+   0.939
+  ]
+ ],
+ "cardiac pacer and wires": [
+  [
+   "pacemaker",
+   4314,
+   0.999,
+   0.983
+  ],
+  [
+   "leads",
+   4191,
+   0.969,
+   0.99
+  ],
+  [
+   "ventricle",
+   3352,
+   0.938,
+   0.997
+  ],
+  [
+   "pacer",
+   3003,
+   0.999,
+   0.98
+  ],
+  [
+   "device",
+   1644,
+   0.908,
+   0.982
+  ],
+  [
+   "transvenous",
+   909,
+   0.997,
+   0.996
+  ],
+  [
+   "dual",
+   906,
+   0.916,
+   0.994
+  ],
+  [
+   "pacing",
+   681,
+   0.997,
+   0.959
+  ],
+  [
+   "aicd",
+   606,
+   1.0,
+   0.995
+  ],
+  [
+   "defibrillator",
+   568,
+   0.995,
+   0.998
+  ],
+  [
+   "single lead",
+   499,
+   1.0,
+   0.99
+  ],
+  [
+   "generator",
+   423,
+   0.991,
+   0.988
+  ],
+  [
+   "lead left-sided",
+   228,
+   1.0,
+   1.0
+  ],
+  [
+   "continuous",
+   213,
+   0.906,
+   0.991
+  ],
+  [
+   "coronary sinus",
+   192,
+   0.99,
+   1.0
+  ],
+  [
+   "lead tips",
+   190,
+   0.969,
+   1.0
+  ],
+  [
+   "their expected",
+   178,
+   0.978,
+   1.0
+  ],
+  [
+   "expected positions",
+   167,
+   0.944,
+   1.0
+  ],
+  [
+   "single-lead",
+   164,
+   1.0,
+   0.994
+  ],
+  [
+   "expected courses",
+   161,
+   0.994,
+   1.0
+  ],
+  [
+   "follow their",
+   150,
+   1.0,
+   1.0
+  ],
+  [
+   "ventricular lead",
+   115,
+   1.0,
+   0.991
+  ],
+  [
+   "temporary",
+   112,
+   0.949,
+   0.875
+  ],
+  [
+   "atrial right ventricular",
+   112,
+   1.0,
+   1.0
+  ],
+  [
+   "atrium and apex",
+   110,
+   1.0,
+   0.991
+  ]
+ ],
+ "subcutaneous air": [
+  [
+   "subcutaneous",
+   2701,
+   0.969,
+   0.952
+  ],
+  [
+   "tissue air",
+   77,
+   1.0,
+   0.87
+  ],
+  [
+   "wall and neck",
+   77,
+   0.963,
+   0.987
+  ],
+  [
+   "air collections",
+   59,
+   1.0,
+   0.932
+  ]
+ ],
+ "infiltration": [
+  [
+   "infiltrate",
+   2579,
+   1.0,
+   0.59
+  ],
+  [
+   "infiltrates",
+   1263,
+   1.0,
+   0.43
+  ],
+  [
+   "infiltrative",
+   249,
+   1.0,
+   0.972
+  ],
+  [
+   "infiltration",
+   161,
+   1.0,
+   0.932
+  ],
+  [
+   "hazy alveolar",
+   84,
+   0.923,
+   0.988
+  ]
+ ],
+ "subclavian line": [
+  [
+   "subclavian line",
+   1192,
+   0.993,
+   0.959
+  ],
+  [
+   "subclavian central",
+   672,
+   0.981,
+   0.948
+  ],
+  [
+   "subclavian catheter",
+   670,
+   0.997,
+   0.897
+  ],
+  [
+   "left-sided subclavian",
+   75,
+   0.926,
+   0.893
+  ],
+  [
+   "subclavian approach central",
+   47,
+   0.979,
+   0.915
+  ]
+ ],
+ "costophrenic angle blunting": [
+  [
+   "blunting",
+   3943,
+   0.954,
+   1.0
+  ],
+  [
+   "blunted",
+   145,
+   0.901,
+   1.0
+  ],
+  [
+   "costophrenic angle suggests",
+   102,
+   0.919,
+   1.0
+  ],
+  [
+   "costophrenic angles posteriorly",
+   82,
+   0.976,
+   1.0
+  ],
+  [
+   "sinus potentially",
+   66,
+   0.971,
+   1.0
+  ],
+  [
+   "costophrenic angles bilaterally",
+   61,
+   0.91,
+   1.0
+  ],
+  [
+   "costophrenic angles suggests",
+   51,
+   0.944,
+   1.0
+  ]
+ ],
+ "calcified nodule": [
+  [
+   "calcified granuloma",
+   672,
+   0.981,
+   1.0
+  ],
+  [
+   "calcified granulomas",
+   286,
+   0.976,
+   1.0
+  ],
+  [
+   "calcified nodule",
+   102,
+   1.0,
+   0.99
+  ],
+  [
+   "calcified mediastinal",
+   100,
+   0.917,
+   1.0
+  ],
+  [
+   "mm calcified",
+   62,
+   0.984,
+   1.0
+  ],
+  [
+   "calcified hilar",
+   54,
+   0.982,
+   1.0
+  ],
+  [
+   "calcified nodules",
+   49,
+   1.0,
+   0.98
+  ],
+  [
+   "lobe calcified",
+   43,
+   0.977,
+   1.0
+  ],
+  [
+   "calcified left hilar",
+   41,
+   0.976,
+   1.0
+  ]
+ ],
+ "granulomatous disease": [
+  [
+   "granuloma",
+   931,
+   1.0,
+   0.988
+  ],
+  [
+   "granulomas",
+   368,
+   1.0,
+   0.973
+  ],
+  [
+   "granulomatous",
+   355,
+   1.0,
+   0.899
+  ],
+  [
+   "tuberculous",
+   129,
+   1.0,
+   0.419
+  ]
+ ],
+ "pigtail catheter": [
+  [
+   "pigtail",
+   3105,
+   1.0,
+   0.851
+  ]
+ ],
+ "pericardial effusion": [
+  [
+   "pericardial effusion",
+   1168,
+   0.997,
+   0.916
+  ],
+  [
+   "cardiomyopathy or pericardial",
+   90,
+   0.989,
+   0.867
+  ],
+  [
+   "although pericardial",
+   82,
+   1.0,
+   1.0
+  ],
+  [
+   "effusion should",
+   60,
+   0.938,
+   1.0
+  ],
+  [
+   "tamponade",
+   58,
+   1.0,
+   0.586
+  ],
+  [
+   "cardiomegaly or pericardial",
+   46,
+   1.0,
+   0.935
+  ]
+ ],
+ "hernia": [
+  [
+   "hernia",
+   2779,
+   1.0,
+   0.977
+  ],
+  [
+   "hiatal",
+   2283,
+   0.999,
+   0.976
+  ],
+  [
+   "hiatus",
+   186,
+   0.912,
+   0.968
+  ],
+  [
+   "bochdalek",
+   97,
+   1.0,
+   1.0
+  ]
+ ],
+ "consolidation": [
+  [
+   "consolidations",
+   3554,
+   0.992,
+   0.45
+  ],
+  [
+   "lobe consolidation",
+   1540,
+   0.991,
+   0.932
+  ],
+  [
+   "lung consolidation",
+   854,
+   0.996,
+   0.47
+  ],
+  [
+   "bronchograms",
+   669,
+   0.981,
+   0.97
+  ],
+  [
+   "basal consolidation",
+   405,
+   0.99,
+   0.965
+  ],
+  [
+   "consolidative",
+   380,
+   0.979,
+   0.924
+  ],
+  [
+   "retrocardiac consolidation",
+   357,
+   0.994,
+   0.972
+  ],
+  [
+   "pulmonary consolidation",
+   299,
+   0.997,
+   0.545
+  ],
+  [
+   "atelectasis or consolidation",
+   296,
+   0.99,
+   0.966
+  ],
+  [
+   "basilar consolidation",
+   291,
+   0.986,
+   0.962
+  ],
+  [
+   "dense consolidation",
+   242,
+   0.992,
+   0.777
+  ],
+  [
+   "consolidated",
+   238,
+   0.996,
+   0.979
+  ],
+  [
+   "bibasilar consolidation",
+   227,
+   1.0,
+   0.969
+  ],
+  [
+   "base consolidation",
+   162,
+   0.988,
+   0.957
+  ],
+  [
+   "perihilar consolidation",
+   158,
+   0.988,
+   0.962
+  ],
+  [
+   "atelectasis underlying consolidation",
+   140,
+   1.0,
+   1.0
+  ],
+  [
+   "opacity with air",
+   125,
+   0.984,
+   1.0
+  ],
+  [
+   "infrahilar consolidation",
+   113,
+   0.991,
+   0.965
+  ],
+  [
+   "atelectasis consolidation",
+   110,
+   0.973,
+   0.982
+  ],
+  [
+   "although underlying consolidation",
+   108,
+   0.991,
+   1.0
+  ],
+  [
+   "parenchymal consolidation",
+   105,
+   0.991,
+   0.505
+  ],
+  [
+   "regions of consolidation",
+   102,
+   0.953,
+   0.951
+  ],
+  [
+   "consolidation or atelectasis",
+   85,
+   0.988,
+   0.953
+  ],
+  [
+   "consolidation is difficult",
+   82,
+   1.0,
+   0.963
+  ],
+  [
+   "heterogeneous consolidation",
+   79,
+   0.988,
+   0.987
+  ]
+ ],
+ "interstitial lung disease": [
+  [
+   "fibrosis",
+   953,
+   1.0,
+   0.93
+  ],
+  [
+   "interstitial lung disease",
+   826,
+   0.994,
+   0.943
+  ],
+  [
+   "chronic interstitial lung",
+   321,
+   0.947,
+   0.994
+  ]
+ ],
+ "scoliosis": [
+  [
+   "scoliosis",
+   1209,
+   0.977,
+   0.994
+  ],
+  [
+   "dextroscoliosis",
+   476,
+   0.988,
+   0.994
+  ],
+  [
+   "s-shaped",
+   244,
+   0.996,
+   0.992
+  ],
+  [
+   "convex curvature",
+   119,
+   0.983,
+   1.0
+  ],
+  [
+   "rightward convex",
+   96,
+   0.95,
+   1.0
+  ],
+  [
+   "levoscoliosis",
+   93,
+   1.0,
+   0.989
+  ],
+  [
+   "dextroconvex",
+   75,
+   0.974,
+   1.0
+  ],
+  [
+   "subsequent asymmetry",
+   63,
+   0.969,
+   1.0
+  ],
+  [
+   "curvature centered",
+   46,
+   0.92,
+   1.0
+  ]
+ ],
+ "pneumomediastinum": [
+  [
+   "pneumomediastinum",
+   1412,
+   1.0,
+   0.453
+  ],
+  [
+   "pneumopericardium",
+   172,
+   1.0,
+   0.791
+  ],
+  [
+   "mediastinal air",
+   61,
+   1.0,
+   0.623
+  ]
+ ],
+ "bone lesion": [
+  [
+   "sclerotic",
+   309,
+   0.922,
+   0.958
+  ],
+  [
+   "osseous lesions",
+   53,
+   0.914,
+   0.396
+  ],
+  [
+   "rib lesion",
+   49,
+   1.0,
+   0.837
+  ],
+  [
+   "osseous metastatic",
+   48,
+   0.923,
+   0.979
+  ],
+  [
+   "hyperostosis",
+   43,
+   1.0,
+   0.977
+  ],
+  [
+   "enchondroma",
+   41,
+   0.953,
+   1.0
+  ],
+  [
+   "idiopathic skeletal",
+   40,
+   0.952,
+   0.975
+  ]
+ ],
+ "multiple masses/nodules": [
+  [
+   "nodules",
+   2409,
+   0.975,
+   0.769
+  ],
+  [
+   "nodular opacities",
+   778,
+   0.924,
+   0.981
+  ],
+  [
+   "masses",
+   600,
+   0.984,
+   0.4
+  ],
+  [
+   "multiple nodular",
+   79,
+   0.975,
+   1.0
+  ],
+  [
+   "lung lesions",
+   58,
+   0.951,
+   0.655
+  ],
+  [
+   "multiple bilateral pulmonary",
+   55,
+   0.932,
+   1.0
+  ]
+ ],
+ "alveolar hemorrhage": [
+  [
+   "hemorrhage",
+   1070,
+   1.0,
+   0.917
+  ],
+  [
+   "contusion",
+   388,
+   1.0,
+   0.876
+  ],
+  [
+   "contusions",
+   52,
+   1.0,
+   0.981
+  ]
+ ],
+ "intra-aortic balloon pump": [
+  [
+   "pump",
+   477,
+   0.996,
+   0.855
+  ],
+  [
+   "intra-aortic",
+   370,
+   0.987,
+   0.881
+  ],
+  [
+   "aortic balloon",
+   77,
+   0.987,
+   0.714
+  ],
+  [
+   "iabp",
+   67,
+   0.957,
+   0.806
+  ]
+ ],
+ "vascular redistribution": [
+  [
+   "redistribution",
+   1613,
+   1.0,
+   0.978
+  ],
+  [
+   "cephalization",
+   358,
+   1.0,
+   0.992
+  ],
+  [
+   "re-distribution",
+   202,
+   0.99,
+   0.975
+  ],
+  [
+   "venous congestion",
+   194,
+   0.99,
+   0.912
+  ],
+  [
+   "zone vascular",
+   107,
+   0.982,
+   1.0
+  ]
+ ],
+ "prosthetic valve": [
+  [
+   "replacement",
+   865,
+   0.947,
+   0.997
+  ],
+  [
+   "prosthetic",
+   446,
+   0.989,
+   0.996
+  ],
+  [
+   "cardiac valve",
+   185,
+   0.969,
+   0.995
+  ],
+  [
+   "sternotomy and aortic",
+   141,
+   1.0,
+   1.0
+  ],
+  [
+   "valve prosthesis",
+   109,
+   1.0,
+   0.991
+  ],
+  [
+   "replacements",
+   75,
+   1.0,
+   1.0
+  ],
+  [
+   "post aortic",
+   74,
+   0.949,
+   0.986
+  ],
+  [
+   "sternotomy and mitral",
+   67,
+   0.985,
+   1.0
+  ],
+  [
+   "sternotomy and cardiac",
+   66,
+   0.971,
+   1.0
+  ],
+  [
+   "tavr",
+   55,
+   1.0,
+   1.0
+  ],
+  [
+   "replaced aortic",
+   47,
+   1.0,
+   1.0
+  ],
+  [
+   "vascular stents",
+   43,
+   1.0,
+   0.977
+  ]
+ ],
+ "lung lesion": [
+  [
+   "nodularity",
+   154,
+   0.945,
+   0.929
+  ],
+  [
+   "lipomatosis",
+   121,
+   1.0,
+   0.983
+  ],
+  [
+   "carcinoma",
+   94,
+   0.949,
+   0.957
+  ],
+  [
+   "mass-like",
+   94,
+   1.0,
+   0.904
+  ],
+  [
+   "masslike",
+   78,
+   1.0,
+   0.949
+  ],
+  [
+   "lobe nodular",
+   77,
+   0.951,
+   0.974
+  ],
+  [
+   "ill-defined nodular",
+   76,
+   0.962,
+   0.987
+  ],
+  [
+   "cm nodule",
+   56,
+   0.918,
+   0.982
+  ],
+  [
+   "apical mass",
+   54,
+   0.9,
+   0.852
+  ],
+  [
+   "reticular nodular",
+   49,
+   1.0,
+   0.959
+  ],
+  [
+   "lung nodular",
+   42,
+   0.933,
+   0.929
+  ],
+  [
+   "lobe lung mass",
+   41,
+   1.0,
+   1.0
+  ]
+ ],
+ "cyst/bullae": [
+  [
+   "bullous",
+   180,
+   1.0,
+   0.989
+  ],
+  [
+   "bulla",
+   103,
+   1.0,
+   0.981
+  ],
+  [
+   "bullae",
+   83,
+   1.0,
+   0.928
+  ],
+  [
+   "cyst",
+   67,
+   1.0,
+   0.985
+  ]
+ ],
+ "elevated hemidiaphragm": [
+  [
+   "elevated right hemidiaphragm",
+   306,
+   1.0,
+   0.993
+  ],
+  [
+   "relative elevation",
+   203,
+   0.976,
+   1.0
+  ],
+  [
+   "elevated left hemidiaphragm",
+   179,
+   1.0,
+   0.994
+  ],
+  [
+   "hemidiaphragm is elevated",
+   178,
+   1.0,
+   1.0
+  ],
+  [
+   "chronic elevation",
+   158,
+   0.994,
+   1.0
+  ],
+  [
+   "slight elevation",
+   106,
+   0.938,
+   1.0
+  ],
+  [
+   "hemidiaphragm is chronic",
+   103,
+   0.972,
+   1.0
+  ],
+  [
+   "hemidiaphragm elevation",
+   87,
+   1.0,
+   0.977
+  ],
+  [
+   "chronically elevated",
+   71,
+   0.959,
+   1.0
+  ],
+  [
+   "marked elevation",
+   65,
+   0.929,
+   1.0
+  ],
+  [
+   "hemidiaphragm remains elevated",
+   58,
+   1.0,
+   1.0
+  ],
+  [
+   "elevated hemidiaphragm",
+   48,
+   1.0,
+   1.0
+  ]
+ ],
+ "spinal fracture": [
+  [
+   "compression",
+   1760,
+   0.965,
+   0.919
+  ],
+  [
+   "thoracic vertebral body",
+   614,
+   0.916,
+   0.982
+  ],
+  [
+   "height",
+   405,
+   0.927,
+   0.951
+  ],
+  [
+   "wedging",
+   260,
+   0.992,
+   0.992
+  ],
+  [
+   "lumbar vertebral",
+   71,
+   0.934,
+   0.972
+  ],
+  [
+   "anterior wedge",
+   56,
+   1.0,
+   1.0
+  ],
+  [
+   "thoracic vertebra",
+   51,
+   0.911,
+   0.98
+  ],
+  [
+   "wedge deformity",
+   49,
+   1.0,
+   0.98
+  ],
+  [
+   "multiple thoracic",
+   47,
+   0.922,
+   0.979
+  ],
+  [
+   "l1 vertebral",
+   41,
+   0.953,
+   0.976
+  ]
+ ],
+ "lung cancer": [
+  [
+   "lung cancer",
+   188,
+   1.0,
+   0.979
+  ],
+  [
+   "pulmonary metastases",
+   171,
+   0.955,
+   1.0
+  ],
+  [
+   "lung malignancy",
+   41,
+   0.953,
+   1.0
+  ]
+ ],
+ "goiter": [
+  [
+   "goiter",
+   253,
+   1.0,
+   0.992
+  ],
+  [
+   "thyroid enlargement",
+   127,
+   1.0,
+   0.984
+  ],
+  [
+   "enlarged thyroid",
+   103,
+   1.0,
+   0.981
+  ]
+ ],
+ "sub-diaphragmatic air": [
+  [
+   "pneumoperitoneum",
+   852,
+   1.0,
+   0.559
+  ],
+  [
+   "intraperitoneal",
+   649,
+   0.997,
+   0.367
+  ],
+  [
+   "intra-abdominal air",
+   104,
+   0.954,
+   0.462
+  ],
+  [
+   "free intra-abdominal",
+   104,
+   0.99,
+   0.471
+  ]
+ ],
+ "increased reticular markings/ild pattern": [
+  [
+   "reticulation",
+   85,
+   0.914,
+   1.0
+  ],
+  [
+   "interstitial fibrosis",
+   47,
+   0.904,
+   0.936
+  ]
+ ]
+}

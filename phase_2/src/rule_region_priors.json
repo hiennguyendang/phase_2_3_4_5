@@ -1,0 +1,646 @@
+{
+"vascular calcification": {
+"mediastinum": 1.0,
+"cardiac silhouette": 0.154,
+"aortic arch": 0.931,
+"upper mediastinum": 0.497,
+"left hilar structures": 0.043,
+"right hilar structures": 0.044
+},
+"enlarged hilum": {
+"right hilar structures": 0.906,
+"left hilar structures": 0.799
+},
+"lung opacity": {
+"left costophrenic angle": 0.38,
+"right hilar structures": 0.379,
+"right upper lung zone": 0.069,
+"left lung": 0.894,
+"right apical zone": 0.04,
+"right costophrenic angle": 0.363,
+"right mid lung zone": 0.159,
+"right lung": 0.87,
+"left hilar structures": 0.372,
+"left upper lung zone": 0.051,
+"right lower lung zone": 0.45,
+"left lower lung zone": 0.515,
+"left mid lung zone": 0.166,
+"left apical zone": 0.034
+},
+"pleural effusion": {
+"right costophrenic angle": 0.76,
+"left costophrenic angle": 0.795,
+"right lung": 0.762,
+"left lung": 0.799,
+"left lower lung zone": 0.26,
+"right lower lung zone": 0.216,
+"left mid lung zone": 0.07,
+"right mid lung zone": 0.05,
+"right upper lung zone": 0.009,
+"left upper lung zone": 0.007
+},
+"costophrenic angle blunting": {
+"right costophrenic angle": 0.627,
+"left costophrenic angle": 0.711,
+"right lung": 0.627,
+"left lung": 0.682
+},
+"lung lesion": {
+"right upper lung zone": 0.14,
+"right hilar structures": 0.125,
+"right mid lung zone": 0.213,
+"right lung": 0.773,
+"right lower lung zone": 0.166,
+"left lower lung zone": 0.127,
+"left lung": 0.654,
+"left mid lung zone": 0.161,
+"left upper lung zone": 0.094,
+"right costophrenic angle": 0.013,
+"left apical zone": 0.039,
+"right apical zone": 0.051,
+"left hilar structures": 0.102,
+"left costophrenic angle": 0.01
+},
+"mass/nodule (not otherwise specified)": {
+"right upper lung zone": 0.152,
+"right hilar structures": 0.119,
+"right mid lung zone": 0.235,
+"right lung": 0.719,
+"left mid lung zone": 0.168,
+"left upper lung zone": 0.09,
+"left lung": 0.575,
+"right lower lung zone": 0.176,
+"right costophrenic angle": 0.011,
+"left lower lung zone": 0.127,
+"left hilar structures": 0.088,
+"left costophrenic angle": 0.01,
+"right apical zone": 0.048,
+"left apical zone": 0.034
+},
+"pneumonia": {
+"right upper lung zone": 0.055,
+"right hilar structures": 0.087,
+"right mid lung zone": 0.185,
+"right lung": 0.79,
+"left upper lung zone": 0.029,
+"left lung": 0.765,
+"right lower lung zone": 0.397,
+"left mid lung zone": 0.166,
+"left lower lung zone": 0.399,
+"left hilar structures": 0.065,
+"left apical zone": 0.004,
+"right apical zone": 0.006
+},
+"tortuous aorta": {
+"mediastinum": 1.0,
+"aortic arch": 0.994,
+"upper mediastinum": 0.084
+},
+"enlarged cardiac silhouette": {
+"cardiac silhouette": 1.0
+},
+"vascular redistribution": {
+"left hilar structures": 0.259,
+"right hilar structures": 0.258,
+"right upper lung zone": 0.999,
+"left lung": 1.0,
+"left upper lung zone": 0.999,
+"right lung": 1.0,
+"left mid lung zone": 0.049,
+"right mid lung zone": 0.05,
+"right lower lung zone": 0.082,
+"left lower lung zone": 0.081
+},
+"pulmonary edema/hazy opacity": {
+"left hilar structures": 0.975,
+"right hilar structures": 0.979,
+"right upper lung zone": 0.041,
+"left lung": 1.0,
+"left upper lung zone": 0.041,
+"right lung": 1.0,
+"left costophrenic angle": 0.046,
+"right costophrenic angle": 0.046,
+"right lower lung zone": 0.187,
+"left lower lung zone": 0.187,
+"left mid lung zone": 0.065,
+"right mid lung zone": 0.065
+},
+"consolidation": {
+"left upper lung zone": 0.047,
+"left lung": 0.714,
+"right hilar structures": 0.073,
+"right lung": 0.694,
+"left hilar structures": 0.055,
+"right upper lung zone": 0.077,
+"right mid lung zone": 0.231,
+"right lower lung zone": 0.443,
+"left lower lung zone": 0.502,
+"left mid lung zone": 0.242,
+"left costophrenic angle": 0.028,
+"right costophrenic angle": 0.027
+},
+"atelectasis": {
+"right lower lung zone": 0.542,
+"left lower lung zone": 0.696,
+"right lung": 0.681,
+"left lung": 0.832,
+"left mid lung zone": 0.167,
+"right upper lung zone": 0.022,
+"right mid lung zone": 0.12,
+"right costophrenic angle": 0.027,
+"left costophrenic angle": 0.033,
+"right hilar structures": 0.031,
+"left hilar structures": 0.025,
+"left upper lung zone": 0.015
+},
+"vascular congestion": {
+"left lung": 1.0,
+"right hilar structures": 0.985,
+"right lung": 1.0,
+"left hilar structures": 0.981,
+"left mid lung zone": 0.028,
+"right lower lung zone": 0.117,
+"right mid lung zone": 0.028,
+"left lower lung zone": 0.117,
+"right upper lung zone": 0.045,
+"left upper lung zone": 0.045
+},
+"hyperaeration": {
+"right lung": 1.0,
+"left lung": 1.0,
+"right lower lung zone": 0.042,
+"left lower lung zone": 0.042,
+"left mid lung zone": 0.036,
+"right mid lung zone": 0.036,
+"right hemidiaphragm": 0.158,
+"left hemidiaphragm": 0.158,
+"right upper lung zone": 0.033,
+"left upper lung zone": 0.033
+},
+"picc": {
+"mediastinum": 1.0,
+"svc": 0.556,
+"upper mediastinum": 0.057,
+"right clavicle": 0.064,
+"left clavicle": 0.045,
+"cavoatrial junction": 0.143,
+"cardiac silhouette": 0.098,
+"right atrium": 0.079
+},
+"pneumothorax": {
+"right lung": 0.676,
+"left lung": 0.556,
+"right apical zone": 0.426,
+"right lower lung zone": 0.099,
+"right costophrenic angle": 0.077,
+"left apical zone": 0.347,
+"left lower lung zone": 0.065,
+"left costophrenic angle": 0.053,
+"right upper lung zone": 0.011,
+"left mid lung zone": 0.013,
+"right mid lung zone": 0.017,
+"left upper lung zone": 0.008
+},
+"mediastinal widening": {
+"mediastinum": 1.0,
+"upper mediastinum": 0.997,
+"aortic arch": 0.179
+},
+"pleural/parenchymal scarring": {
+"left costophrenic angle": 0.073,
+"left lung": 0.739,
+"left hilar structures": 0.048,
+"right hilar structures": 0.061,
+"right lower lung zone": 0.208,
+"left lower lung zone": 0.238,
+"right lung": 0.75,
+"left mid lung zone": 0.117,
+"right upper lung zone": 0.068,
+"right mid lung zone": 0.127,
+"right costophrenic angle": 0.069,
+"left apical zone": 0.205,
+"right apical zone": 0.231,
+"left upper lung zone": 0.044
+},
+"cabg grafts": {
+"cardiac silhouette": 1.0,
+"mediastinum": 0.181
+},
+"chest tube": {
+"left lung": 0.558,
+"right lung": 0.662,
+"right lower lung zone": 0.093,
+"right apical zone": 0.078,
+"left apical zone": 0.063,
+"left mid lung zone": 0.014,
+"left lower lung zone": 0.067,
+"right upper lung zone": 0.007,
+"right mid lung zone": 0.012,
+"left upper lung zone": 0.009
+},
+"enteric tube": {
+"mediastinum": 1.0,
+"abdomen": 0.998,
+"left hemidiaphragm": 0.194,
+"right hemidiaphragm": 0.183,
+"cardiac silhouette": 0.014,
+"upper mediastinum": 0.01
+},
+"endotracheal tube": {
+"trachea": 1.0,
+"carina": 0.592,
+"upper mediastinum": 0.056,
+"right hilar structures": 0.021,
+"left hilar structures": 0.008,
+"right clavicle": 0.051,
+"left clavicle": 0.056
+},
+"ij line": {
+"mediastinum": 1.0,
+"cavoatrial junction": 0.125,
+"right atrium": 0.108,
+"cardiac silhouette": 0.131,
+"svc": 0.504,
+"upper mediastinum": 0.057
+},
+"pigtail catheter": {
+"right lung": 0.66,
+"cardiac silhouette": 0.016,
+"right lower lung zone": 0.151,
+"left lower lung zone": 0.103,
+"left lung": 0.508,
+"right mid lung zone": 0.017,
+"left mid lung zone": 0.014,
+"right costophrenic angle": 0.053,
+"left costophrenic angle": 0.041,
+"left apical zone": 0.04,
+"right apical zone": 0.045,
+"right upper lung zone": 0.009,
+"left upper lung zone": 0.008
+},
+"cardiac pacer and wires": {
+"mediastinum": 1.0,
+"cardiac silhouette": 1.0,
+"right atrium": 0.364,
+"right clavicle": 0.022,
+"left clavicle": 0.02,
+"svc": 0.01,
+"cavoatrial junction": 0.003,
+"upper mediastinum": 0.004
+},
+"multiple masses/nodules": {
+"right lower lung zone": 0.146,
+"left lower lung zone": 0.124,
+"right lung": 0.875,
+"left lung": 0.814,
+"left apical zone": 0.027,
+"right upper lung zone": 0.123,
+"right apical zone": 0.029,
+"left upper lung zone": 0.098,
+"left mid lung zone": 0.143,
+"right mid lung zone": 0.166,
+"left hilar structures": 0.067,
+"right costophrenic angle": 0.007,
+"right hilar structures": 0.08,
+"left costophrenic angle": 0.006
+},
+"increased reticular markings/ild pattern": {
+"right lower lung zone": 0.269,
+"left lower lung zone": 0.272,
+"right lung": 1.0,
+"left lung": 1.0,
+"left mid lung zone": 0.073,
+"right mid lung zone": 0.071,
+"right upper lung zone": 0.051,
+"left upper lung zone": 0.051
+},
+"aspiration": {
+"right lower lung zone": 0.778,
+"left lower lung zone": 0.754,
+"right lung": 0.795,
+"left lung": 0.772,
+"left mid lung zone": 0.124,
+"left upper lung zone": 0.019,
+"left hilar structures": 0.06,
+"right hilar structures": 0.077,
+"right mid lung zone": 0.136,
+"right upper lung zone": 0.037,
+"right apical zone": 0.003,
+"left apical zone": 0.002
+},
+"lobar/segmental collapse": {
+"left mid lung zone": 0.442,
+"left lower lung zone": 0.545,
+"left lung": 0.718,
+"right mid lung zone": 0.26,
+"right lower lung zone": 0.321,
+"right lung": 0.526,
+"right upper lung zone": 0.072,
+"left upper lung zone": 0.045
+},
+"bronchiectasis": {
+"right lung": 0.892,
+"left lung": 0.716,
+"right lower lung zone": 0.41,
+"left lower lung zone": 0.343,
+"left mid lung zone": 0.219,
+"left hilar structures": 0.07,
+"right mid lung zone": 0.361,
+"right upper lung zone": 0.196,
+"left upper lung zone": 0.101,
+"right hilar structures": 0.092
+},
+"airspace opacity": {
+"right lung": 0.896,
+"left lung": 0.824,
+"right hilar structures": 0.13,
+"left hilar structures": 0.094,
+"right lower lung zone": 0.363,
+"left lower lung zone": 0.332,
+"left mid lung zone": 0.108,
+"right upper lung zone": 0.065,
+"left upper lung zone": 0.048,
+"right mid lung zone": 0.125,
+"right costophrenic angle": 0.02,
+"left costophrenic angle": 0.012
+},
+"copd/emphysema": {
+"right lung": 1.0,
+"left lung": 1.0,
+"right hemidiaphragm": 0.136,
+"left hemidiaphragm": 0.136,
+"left mid lung zone": 0.092,
+"right upper lung zone": 0.112,
+"left upper lung zone": 0.112,
+"right mid lung zone": 0.093,
+"right hilar structures": 0.051,
+"left hilar structures": 0.05,
+"right lower lung zone": 0.08,
+"left lower lung zone": 0.079
+},
+"spinal degenerative changes": {
+"spine": 1.0
+},
+"scoliosis": {
+"spine": 1.0
+},
+"linear/patchy atelectasis": {
+"left lower lung zone": 0.615,
+"left lung": 0.78,
+"left mid lung zone": 0.116,
+"right lower lung zone": 0.524,
+"right lung": 0.699,
+"right mid lung zone": 0.101,
+"left costophrenic angle": 0.018,
+"right upper lung zone": 0.02,
+"left upper lung zone": 0.014,
+"left hilar structures": 0.02,
+"right costophrenic angle": 0.02,
+"right hilar structures": 0.025
+},
+"spinal fracture": {
+"spine": 1.0
+},
+"fluid overload/heart failure": {
+"left lung": 1.0,
+"right lung": 1.0,
+"cardiac silhouette": 1.0,
+"left hilar structures": 0.183,
+"right hilar structures": 0.184,
+"right lower lung zone": 0.094,
+"left lower lung zone": 0.095,
+"right upper lung zone": 0.091,
+"left upper lung zone": 0.09,
+"left mid lung zone": 0.028,
+"right mid lung zone": 0.028,
+"left costophrenic angle": 0.032,
+"right costophrenic angle": 0.032
+},
+"sub-diaphragmatic air": {
+"left hemidiaphragm": 0.81,
+"right hemidiaphragm": 0.937,
+"abdomen": 1.0
+},
+"mediastinal displacement": {
+"mediastinum": 1.0,
+"trachea": 0.329,
+"upper mediastinum": 0.353,
+"cardiac silhouette": 0.151
+},
+"superior mediastinal mass/enlargement": {
+"mediastinum": 0.836,
+"upper mediastinum": 0.998
+},
+"subclavian line": {
+"mediastinum": 1.0,
+"right clavicle": 0.502,
+"right atrium": 0.084,
+"svc": 0.536,
+"upper mediastinum": 0.049,
+"left clavicle": 0.602,
+"right upper lung zone": 0.003,
+"cavoatrial junction": 0.116,
+"left upper lung zone": 0.0
+},
+"hydropneumothorax": {
+"right costophrenic angle": 0.712,
+"right lower lung zone": 0.285,
+"right lung": 0.715,
+"right apical zone": 0.26,
+"left costophrenic angle": 0.457,
+"left apical zone": 0.166,
+"left lung": 0.464,
+"left mid lung zone": 0.032,
+"left upper lung zone": 0.02,
+"left lower lung zone": 0.143,
+"right upper lung zone": 0.023,
+"right mid lung zone": 0.04
+},
+"chest port": {
+"mediastinum": 1.0,
+"right atrium": 0.181,
+"cardiac silhouette": 0.188,
+"svc": 0.439,
+"cavoatrial junction": 0.171,
+"upper mediastinum": 0.025,
+"right clavicle": 0.045,
+"left clavicle": 0.04,
+"right upper lung zone": 0.003,
+"left upper lung zone": 0.002
+},
+"granulomatous disease": {
+"right lung": 0.718,
+"right mid lung zone": 0.209,
+"right lower lung zone": 0.142,
+"left lung": 0.603,
+"left mid lung zone": 0.165,
+"right upper lung zone": 0.143,
+"right apical zone": 0.121,
+"left apical zone": 0.103,
+"left lower lung zone": 0.112,
+"right hilar structures": 0.082,
+"left hilar structures": 0.081,
+"left upper lung zone": 0.109
+},
+"infiltration": {
+"left mid lung zone": 0.2,
+"right mid lung zone": 0.229,
+"right lower lung zone": 0.366,
+"left lung": 0.834,
+"left lower lung zone": 0.378,
+"right lung": 0.835,
+"right hilar structures": 0.106,
+"right upper lung zone": 0.074,
+"left hilar structures": 0.09,
+"left upper lung zone": 0.056,
+"right costophrenic angle": 0.014,
+"left costophrenic angle": 0.014
+},
+"calcified nodule": {
+"right mid lung zone": 0.178,
+"right lower lung zone": 0.124,
+"right lung": 0.71,
+"left lung": 0.601,
+"left mid lung zone": 0.137,
+"right costophrenic angle": 0.009,
+"right upper lung zone": 0.12,
+"right apical zone": 0.079,
+"left apical zone": 0.063,
+"left lower lung zone": 0.105,
+"upper mediastinum": 0.084,
+"right hilar structures": 0.159,
+"left hilar structures": 0.166,
+"left upper lung zone": 0.086,
+"left costophrenic angle": 0.009
+},
+"pericardial effusion": {
+"cardiac silhouette": 1.0
+},
+"elevated hemidiaphragm": {
+"right hemidiaphragm": 0.63,
+"left hemidiaphragm": 0.462
+},
+"goiter": {
+"trachea": 1.0,
+"upper mediastinum": 0.998
+},
+"tracheostomy tube": {
+"trachea": 1.0,
+"upper mediastinum": 0.06,
+"right clavicle": 0.025,
+"carina": 0.092,
+"left clavicle": 0.024
+},
+"interstitial lung disease": {
+"right lung": 1.0,
+"left lung": 1.0,
+"left mid lung zone": 0.118,
+"right upper lung zone": 0.093,
+"left upper lung zone": 0.093,
+"right mid lung zone": 0.117,
+"left lower lung zone": 0.251,
+"right lower lung zone": 0.25
+},
+"cyst/bullae": {
+"right lung": 0.805,
+"left lung": 0.707,
+"left mid lung zone": 0.105,
+"right upper lung zone": 0.133,
+"left upper lung zone": 0.099,
+"right mid lung zone": 0.129,
+"right apical zone": 0.225,
+"left apical zone": 0.191,
+"left hilar structures": 0.032,
+"left lower lung zone": 0.094,
+"right lower lung zone": 0.122,
+"right hilar structures": 0.018
+},
+"mediastinal drain": {
+"mediastinum": 1.0,
+"cardiac silhouette": 0.196,
+"upper mediastinum": 0.031
+},
+"swan-ganz catheter": {
+"mediastinum": 1.0,
+"right hilar structures": 0.898,
+"abdomen": 0.066,
+"cardiac silhouette": 1.0,
+"left hilar structures": 0.457,
+"upper mediastinum": 0.614,
+"right atrium": 0.016,
+"svc": 0.016,
+"cavoatrial junction": 0.001
+},
+"prosthetic valve": {
+"cardiac silhouette": 1.0
+},
+"shoulder osteoarthritis": {
+"right clavicle": 0.918,
+"left clavicle": 0.677
+},
+"alveolar hemorrhage": {
+"left mid lung zone": 0.117,
+"right lung": 0.829,
+"left lung": 0.728,
+"left lower lung zone": 0.165,
+"right lower lung zone": 0.22,
+"right upper lung zone": 0.089,
+"right mid lung zone": 0.171,
+"left upper lung zone": 0.052
+},
+"hernia": {
+"mediastinum": 1.0,
+"right hemidiaphragm": 0.822,
+"left hemidiaphragm": 0.96,
+"cardiac silhouette": 0.104
+},
+"lung cancer": {
+"left mid lung zone": 0.139,
+"right mid lung zone": 0.203,
+"right lower lung zone": 0.137,
+"left lung": 0.729,
+"left lower lung zone": 0.104,
+"right lung": 0.821,
+"right hilar structures": 0.116,
+"right upper lung zone": 0.136,
+"left apical zone": 0.019,
+"right apical zone": 0.03,
+"left hilar structures": 0.085,
+"mediastinum": 0.05,
+"right costophrenic angle": 0.046,
+"left upper lung zone": 0.094,
+"left costophrenic angle": 0.041,
+"upper mediastinum": 0.019
+},
+"intra-aortic balloon pump": {
+"mediastinum": 1.0,
+"aortic arch": 0.985,
+"upper mediastinum": 0.997,
+"abdomen": 0.028
+},
+"clavicle fracture": {
+"left clavicle": 0.48,
+"right clavicle": 0.624
+},
+"bone lesion": {
+"right clavicle": 0.572,
+"left clavicle": 0.552,
+"spine": 0.945
+},
+"pneumomediastinum": {
+"mediastinum": 1.0,
+"right hilar structures": 0.858,
+"left hilar structures": 0.894,
+"upper mediastinum": 0.117,
+"cardiac silhouette": 0.153
+},
+"aortic graft/repair": {
+"aortic arch": 0.947,
+"upper mediastinum": 0.974,
+"cardiac silhouette": 1.0
+},
+"diaphragmatic eventration (benign)": {
+"right hemidiaphragm": 0.868,
+"left hemidiaphragm": 0.395
+}
+}
