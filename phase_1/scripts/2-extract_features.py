@@ -106,7 +106,13 @@ def main() -> int:
         imgs = torch.stack([img for _, img in batch], dim=0)         # [B,3,res,res]
         feats = biovilt.encode_batch(model, imgs, args.device)       # [B,197,C] f16 cpu
         for iid, feat in zip(ids, feats):
-            io.save_feature(args.out_dir, iid, feat)
+            try:
+                io.save_feature(args.out_dir, iid, feat)
+            except Exception as e:  # noqa: BLE001 — disk pressure? flush to free space, retry once
+                print(f"  [save retry] {iid}: {e}; flushing then retrying")
+                io.flush_to_drive(args.out_dir, args.remote)
+                since_flush = 0
+                io.save_feature(args.out_dir, iid, feat)
             written += 1
             since_flush += 1
         if since_flush >= args.flush_every:

@@ -64,13 +64,22 @@ def load_image(path: str | Path, res: int = config.INPUT_RES,
 
 
 # ---- forward -----------------------------------------------------------------
-def _projected(out) -> tuple[torch.Tensor, torch.Tensor]:
-    """Pull (global [B,C], patch [B,C,gh,gw]) from an ImageModelOutput across versions."""
-    glob = getattr(out, "projected_global_embedding", None)
-    patch = getattr(out, "projected_patch_embeddings", None)
+def _pick_features(out) -> tuple[torch.Tensor, torch.Tensor]:
+    """Pull (global [B,C], patch [B,C,gh,gw]) from an ImageModelOutput per config.FEATURE_SOURCE.
+
+    "backbone" (default) uses the 512-d pre-projection features (img_embedding + patch_embeddings)
+    to match the existing reference cache; "projected" uses the 128-d joint-space head."""
+    if config.FEATURE_SOURCE == "projected":
+        glob = getattr(out, "projected_global_embedding", None)
+        patch = getattr(out, "projected_patch_embeddings", None)
+        names = "projected_global_embedding/projected_patch_embeddings"
+    else:  # "backbone" — 512-d, what the collaborator reference was built from
+        glob = getattr(out, "img_embedding", None)
+        patch = getattr(out, "patch_embeddings", None)
+        names = "img_embedding/patch_embeddings"
     if glob is None or patch is None:
         raise RuntimeError(
-            "BioViL-T output is missing projected_global_embedding/projected_patch_embeddings "
+            f"BioViL-T output is missing {names} (FEATURE_SOURCE={config.FEATURE_SOURCE}) "
             "— check the installed health_multimodal version."
         )
     return glob, patch
@@ -80,7 +89,7 @@ def _projected(out) -> tuple[torch.Tensor, torch.Tensor]:
 def encode_batch(model, batch: torch.Tensor, device: str | torch.device) -> torch.Tensor:
     """[B,3,res,res] -> [B, 1+gh*gw, C] float16 (CPU). Row 0 global, rows 1.. patch grid."""
     out = model(batch.to(device, non_blocking=True))
-    glob, patch = _projected(out)                     # [B,C], [B,C,gh,gw]
+    glob, patch = _pick_features(out)                 # [B,C], [B,C,gh,gw]
     if patch.dim() != 4:
         raise RuntimeError(f"expected 4-D patch embeddings [B,C,gh,gw], got {tuple(patch.shape)}")
     grid = patch.flatten(2).transpose(1, 2)           # [B, gh*gw, C], token index = y*gw+x

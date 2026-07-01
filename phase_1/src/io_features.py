@@ -30,13 +30,30 @@ def _rclone(*args: str) -> int:
         return -1
 
 
-def save_feature(out_dir: Path, image_id: str, feat: torch.Tensor) -> Path:
-    """torch.save a [197, C] float16 tensor to <out_dir>/<image_id>.pt (stem = full image_id)."""
+def save_feature(out_dir: Path, image_id: str, feat: torch.Tensor, retries: int = 3) -> Path:
+    """torch.save a [197, C] float16 tensor to <out_dir>/<image_id>.pt (stem = full image_id).
+
+    Robust for long Kaggle runs: `.clone()` gives the row its OWN storage (a batch-row view would
+    otherwise serialize the whole batch); write to a .tmp then atomically rename (a crash never
+    leaves a half-written .pt that would corrupt resume); retry a few times on transient FS errors."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{image_id}.pt"
-    torch.save(feat.to(torch.float16).contiguous(), path)
-    return path
+    t = feat.detach().to(torch.float16).clone().contiguous()   # own storage, not a batch view
+    tmp = path.with_suffix(".pt.tmp")
+    last: Exception | None = None
+    for _ in range(max(1, retries)):
+        try:
+            torch.save(t, tmp)
+            tmp.replace(path)                                  # atomic on the same filesystem
+            return path
+        except Exception as e:  # noqa: BLE001 — transient iostream/ENOSPC etc.
+            last = e
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    raise last if last is not None else RuntimeError(f"failed to save {path}")
 
 
 def local_done_ids(out_dir: Path) -> set[str]:

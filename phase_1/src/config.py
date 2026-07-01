@@ -32,6 +32,13 @@ CELL = INPUT_RES / GRID_W        # 32 px per grid cell (same as pooling.py)
 # BioViL-T image encoder, loaded FROZEN (health_multimodal downloads the weights).
 BIOVILT_ENCODER = "biovil_t"
 
+# Which BioViL-T output feeds the cache. The existing collaborator reference is the 512-d
+# PRE-projection backbone features (img_embedding + patch_embeddings), NOT the 128-d projected
+# head (projected_global/patch_embeddings). Confirmed by the reference-reproduce in 3-verify.
+#   "backbone"  : img_embedding [B,512] + patch_embeddings [B,512,14,14]   (DEFAULT, matches ref)
+#   "projected" : projected_global_embedding [B,128] + projected_patch_embeddings [B,128,14,14]
+FEATURE_SOURCE = "backbone"      # "backbone" | "projected"
+
 # Image preprocessing geometry. The mimic-cxr-448 jpgs are already a straight STRETCH to
 # 448x448 (the frame the m3 boxes were rescaled into), so the default feeds them as-is with
 # NO geometric resize/crop -> the box<->grid mapping stays exact. "resize_crop" reproduces
