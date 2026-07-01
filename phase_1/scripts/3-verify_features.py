@@ -100,16 +100,22 @@ def check_coverage(root: Path, manifest_ids: set[str], prior_ids: set[str]) -> N
         print(f"    missing {len(miss):,} manifest features, e.g. {miss[:3]}")
 
 
-# ---- 4: reference reproduce --------------------------------------------------
-def check_reference(reference: Path, images_root: Path, device: str) -> None:
-    if not reference.exists():
-        print(f"[4 SKIP] reference not found: {reference}")
-        return
-    ref = _load_pt(reference).to(torch.float32)
-    image_id = reference.stem
-    src = K.guess_image_path(images_root, image_id) or K.build_image_index(images_root).get(image_id)
-    if src is None:
-        print(f"[4 SKIP] source jpg for {image_id} not under {images_root}")
+# ---- 4: encoder sanity (go/no-go for the FROZEN pretrained encoder) -----------
+def check_sanity(images_root: Path, device: str, n: int = 4) -> None:
+    """Confirm the frozen encoder is alive and DISCRIMINATIVE (not degenerate/constant).
+
+    We deliberately DON'T match the docs/ reference: that .pt was made with a *fine-tuned*
+    BioViL-T, and we want the FROZEN pretrained one — so its features are expected to differ.
+    Instead the go/no-go is: features vary across channels (std>0) and the encoder separates
+    different images (cross-image global cosine well below 1)."""
+    import glob as _glob
+    jpgs = []
+    for p in _glob.iglob(str(Path(images_root) / "p*" / "p*" / "*.jpg")):
+        jpgs.append(p)
+        if len(jpgs) >= n:
+            break
+    if not jpgs:
+        print(f"[4 SKIP] no jpgs under {images_root} for the sanity check")
         return
     try:
         import biovilt
@@ -117,20 +123,51 @@ def check_reference(reference: Path, images_root: Path, device: str) -> None:
     except Exception as e:  # noqa: BLE001
         print(f"[4 SKIP] could not load BioViL-T ({e}); run on Kaggle with health_multimodal")
         return
-    img = biovilt.load_image(src).unsqueeze(0)
-    got = biovilt.encode_batch(model, img, device)[0].to(torch.float32)
+    globals_, stds = [], []
+    for p in jpgs:
+        feat = biovilt.encode_batch(model, biovilt.load_image(p).unsqueeze(0), device)[0].float()
+        globals_.append(feat[0])
+        stds.append(feat.std().item())
+    cross = []
+    for i in range(len(globals_)):
+        for j in range(i + 1, len(globals_)):
+            cross.append(torch.cosine_similarity(globals_[i], globals_[j], dim=0).item())
+    min_std = min(stds)
+    max_cross = max(cross) if cross else 0.0
+    ok = min_std > 1e-3 and max_cross < 0.999          # varied channels + separates images
+    print(f"[4 {'PASS' if ok else 'FAIL'}] frozen encoder sanity: {len(jpgs)} imgs | "
+          f"min feat std={min_std:.3f} | max cross-image global cos={max_cross:.3f} "
+          f"(source={config.FEATURE_SOURCE}, C={globals_[0].shape[0]})")
+    if not ok:
+        print("    -> degenerate or non-discriminative features: check the encoder actually "
+              "loaded pretrained weights (not random init).")
+
+
+def compare_reference(reference: Path, images_root: Path, device: str) -> None:
+    """OPTIONAL, informational: cosine vs a stored reference .pt. Low cos is EXPECTED when the
+    reference was fine-tuned and we run frozen — never a failure, just reported."""
+    if not reference or not reference.exists():
+        print(f"[ref SKIP] no reference at {reference}")
+        return
+    ref = _load_pt(reference).to(torch.float32)
+    image_id = reference.stem
+    src = K.guess_image_path(images_root, image_id) or K.build_image_index(images_root).get(image_id)
+    if src is None:
+        print(f"[ref SKIP] source jpg for {image_id} not found")
+        return
+    try:
+        import biovilt
+        model = biovilt.load_encoder(device)
+    except Exception as e:  # noqa: BLE001
+        print(f"[ref SKIP] could not load BioViL-T ({e})")
+        return
+    got = biovilt.encode_batch(model, biovilt.load_image(src).unsqueeze(0), device)[0].to(torch.float32)
     if got.shape != ref.shape:
-        print(f"[4 FAIL] shape {tuple(got.shape)} != reference {tuple(ref.shape)}")
+        print(f"[ref INFO] shape {tuple(got.shape)} vs reference {tuple(ref.shape)}")
         return
     cos = torch.cosine_similarity(got.flatten(), ref.flatten(), dim=0).item()
-    row_cos = torch.cosine_similarity(got, ref, dim=1)            # per-row [197]
-    worst = row_cos.min().item()
-    ok = cos > 0.99 and worst > 0.97
-    print(f"[4 {'PASS' if ok else 'FAIL'}] reference reproduce: flat cos={cos:.5f}, "
-          f"min row cos={worst:.5f}  (transform={config.TRANSFORM_MODE})")
-    if not ok:
-        print("    -> features DIFFER from the reference. Try TRANSFORM_MODE='resize_crop' "
-              "(or check the encoder variant); the cache must match the existing collaborator set.")
+    print(f"[ref INFO] cosine vs reference = {cos:.4f} "
+          f"(low is EXPECTED — reference is fine-tuned, we run frozen)")
 
 
 # ---- 5: alignment overlay ----------------------------------------------------
@@ -201,7 +238,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--manifest", type=Path, default=config.DEFAULT_MANIFEST)
     p.add_argument("--pairs", type=Path, default=config.DEFAULT_PAIRS)
     p.add_argument("--images-root", type=Path, default=config.DEFAULT_IMAGES_ROOT)
-    p.add_argument("--reference", type=Path, default=config.DEFAULT_REFERENCE)
+    p.add_argument("--compare-reference", type=Path, default=None,
+                   help="OPTIONAL: cosine vs a stored reference .pt (informational only; a "
+                        "fine-tuned reference is EXPECTED to differ from the frozen encoder)")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--sample", type=int, default=2000, help="max .pt to deep-check (0 = all)")
     p.add_argument("--region", default="right lung", help="anatomical region for the overlay")
@@ -221,7 +260,9 @@ def main() -> int:
 
     check_structure_naming(args.features_root, valid, args.sample)
     check_coverage(args.features_root, manifest_ids, prior_ids)
-    check_reference(args.reference, args.images_root, args.device)
+    check_sanity(args.images_root, args.device)
+    if args.compare_reference:
+        compare_reference(args.compare_reference, args.images_root, args.device)
 
     # region index from phase_3's canonical region list (29 detector classes)
     region_names = [

@@ -23,10 +23,16 @@ The m3 boxes (`data/m3_labels/boxes.npy`, `0..448`) live in a **448×448 stretch
 `mimic-cxr-448` jpgs are exactly 448×448 (a straight stretch). So M1 feeds those jpgs **as-is, with
 no geometric resize/crop** (`TRANSFORM_MODE="stretch448"`), *not* BioViL-T's default
 `Resize(512)+CenterCrop(448)` (which would re-frame the image and desync the boxes). cell = 448/14 =
-32 px, matching `pooling.py`. `scripts/3-verify_features.py` proves this two ways:
-- **reference reproduce**: re-extracts a bundled real `docs/<id>.pt` and asserts `cosine ≈ 1`
-  (proves model variant + preprocessing + flatten order end-to-end);
-- **overlay**: draws a region bbox on the 14×14 grid so a human confirms the cells sit on the anatomy.
+32 px, matching `pooling.py`. `scripts/3-verify_features.py` proves alignment with an **overlay**:
+it draws a region bbox on the 14×14 grid so a human confirms the cells sit on the anatomy.
+
+## Frozen, self-consistent (we do NOT match the fine-tuned reference)
+The `docs/*.pt` / `hoangtimothy/biovilt-features` cache was made with a **fine-tuned** BioViL-T.
+We want the **FROZEN pretrained** encoder, so our features are *intentionally different* — the whole
+cache is produced by one frozen model, one preprocessing. The go/no-go is therefore **not** a
+reference match; it's `check_sanity` (the frozen encoder is alive & discriminative: feature std>0
+and it separates different images) plus the alignment overlay. `--compare-reference <pt>` still
+prints the cosine vs the fine-tuned reference, but only as information (low is expected).
 
 ## Layout (mirrors phase_2 / phase_3)
 ```
@@ -49,9 +55,9 @@ phase_1/
 |------|------|-----|
 | `1-build_worklist.py` | gather `image_id ∪ prior_image_id`, resolve each to a jpg path → `worklist.jsonl` | no |
 | `2-extract_features.py` | the extraction loop (batched forward + Drive flush + resume) | yes |
-| `3-verify_features.py` | structure / naming / coverage + reference-reproduce + alignment overlay | yes\* |
+| `3-verify_features.py` | structure / naming / coverage + frozen-encoder sanity + alignment overlay | yes\* |
 
-\* `3-verify` runs the structural + alignment checks on CPU; only the **reference reproduce** (`[4]`)
+\* `3-verify` runs the structural + alignment checks on CPU; only the **encoder sanity** (`[4]`)
 needs the GPU/encoder, and it skips cleanly if `health_multimodal` is absent.
 
 ## Run order (Kaggle — see `notebooks/m1_kaggle.ipynb`)
@@ -63,9 +69,9 @@ pip install hi-ml-multimodal          # BioViL-T
 python scripts/1-build_worklist.py --images-root <mimic-cxr-448> \
        --manifest <m3_labels>/manifest.jsonl --pairs <m4_labels>/m3_pairs.jsonl --out worklist.jsonl
 
-# 2) GO/NO-GO: reproduce the bundled reference BEFORE the big run (must pass cosine~1)
-python scripts/3-verify_features.py --reference docs/<id>.pt --images-root <mimic-cxr-448> \
-       --features-root features --manifest <..>/manifest.jsonl --pairs <..>/m3_pairs.jsonl --labels-dir <m3_labels>
+# 2) GO/NO-GO: frozen-encoder sanity + alignment BEFORE the big run (both must PASS)
+python scripts/3-verify_features.py --images-root <mimic-cxr-448> --features-root features \
+       --manifest <..>/manifest.jsonl --pairs <..>/m3_pairs.jsonl --labels-dir <m3_labels>
 
 # 3) extract (resumable; flushes to Drive, frees local). Re-run after a dead session.
 python scripts/2-extract_features.py --worklist worklist.jsonl --out-dir features \
@@ -77,10 +83,11 @@ python scripts/3-verify_features.py --features-root features --labels-dir <m3_la
 ```
 
 ## Notes
-- **`C` is auto-detected** (not hardcoded). The bundled reference is 512-dim; the whole cache must
-  share one `C` (the existing collaborator set in `hoangtimothy/biovilt-features-part1..5` is 512).
+- **Feature source** = `config.FEATURE_SOURCE="backbone"` → `img_embedding` [512] + `patch_embeddings`
+  [512,14,14] (the 512-d PRE-projection features), **not** the 128-d `projected_*` head. `C` is
+  auto-detected; the whole cache shares one `C` (512).
 - **Sync/resume** uses the same rclone **OAuth** remote as phase_2 (`GDRIVE_TOKEN` secret — *not* a
   service account, which 403s on My-Drive upload). `done_ids` = `rclone lsf` ∪ local staging.
 - **Priors are included** in the worklist because M4 (temporal) needs the prior image's features too.
-- If `[4] reference reproduce` ever FAILS, flip `config.TRANSFORM_MODE` to `"resize_crop"` and re-run;
-  the cache must match however the existing collaborator features were built.
+- `docs/*.pt` / `hoangtimothy/biovilt-features` are **fine-tuned** BioViL-T features — deliberately
+  NOT reused. We run the frozen encoder for a clean, reproducible, self-consistent cache.
