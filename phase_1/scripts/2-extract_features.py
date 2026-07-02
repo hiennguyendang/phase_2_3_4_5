@@ -69,6 +69,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--workers", type=int, default=config.NUM_WORKERS)
     p.add_argument("--flush-every", type=int, default=config.FLUSH_EVERY)
     p.add_argument("--limit", type=int, default=0, help="stop after N new images (0 = all; smoke test)")
+    p.add_argument("--num-parts", type=int, default=1,
+                   help="split the worklist into this many contiguous shards (for per-part datasets)")
+    p.add_argument("--part", type=int, default=0,
+                   help="1-indexed shard to process when --num-parts>1 (0 = the whole worklist)")
     return p.parse_args()
 
 
@@ -78,6 +82,12 @@ def main() -> int:
         raise SystemExit(f"[ERROR] worklist not found: {args.worklist} (run 1-build_worklist.py)")
 
     rows = _load_worklist(args.worklist)
+    if args.num_parts > 1 and args.part >= 1:
+        import math
+        chunk = math.ceil(len(rows) / args.num_parts)
+        lo, hi = (args.part - 1) * chunk, args.part * chunk
+        rows = rows[lo:hi]
+        print(f"part {args.part}/{args.num_parts}: worklist rows [{lo:,}:{hi:,}] -> {len(rows):,} images")
     done = io.done_ids(args.out_dir, args.remote)
     todo = [r for r in rows if r["image_id"] not in done]
     if args.limit:
