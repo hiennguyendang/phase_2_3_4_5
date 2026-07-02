@@ -141,17 +141,23 @@ def main() -> int:
                 push()
         sched.step()
         n = max(1, len(tl))
-        res = evaluate(model, vl, args.device)
-        f1 = res["image_f1_macro"]              # headline metric for checkpoint selection (spec 3.6)
-        print(f"epoch {epoch + 1:3}/{args.epochs} | loss {running.get('total', 0)/n:.4f} "
-              f"(c {running.get('concept', 0)/n:.3f} r {running.get('region_chex', 0)/n:.3f} "
-              f"i {running.get('image_chex', 0)/n:.3f}) | val img-F1 {f1:.4f} "
-              f"AUC {res['image_auc_macro']:.4f} | region F1 {res['region_f1_macro']:.4f}"
-              + (f" | concept F1 {res.get('concept_f1_macro', float('nan')):.4f}" if "concept_f1_macro" in res else ""))
-
-        is_best = f1 > best
-        if is_best:
-            best = f1
+        if len(val_ds) > 0:
+            res = evaluate(model, vl, args.device)
+            f1 = res["image_f1_macro"]          # headline metric for checkpoint selection (spec 3.6)
+            print(f"epoch {epoch + 1:3}/{args.epochs} | loss {running.get('total', 0)/n:.4f} "
+                  f"(c {running.get('concept', 0)/n:.3f} r {running.get('region_chex', 0)/n:.3f} "
+                  f"i {running.get('image_chex', 0)/n:.3f}) | val img-F1 {f1:.4f} "
+                  f"AUC {res['image_auc_macro']:.4f} | region F1 {res['region_f1_macro']:.4f}"
+                  + (f" | concept F1 {res.get('concept_f1_macro', float('nan')):.4f}" if "concept_f1_macro" in res else ""))
+            is_best = f1 > best
+            if is_best:
+                best = f1
+        else:  # no val features (e.g. a PARTIAL feature cache) -> can't select on val; keep latest as best
+            res = {"image_f1_macro": float("nan"), "image_auc_macro": float("nan")}
+            f1, is_best = float("nan"), True
+            print(f"epoch {epoch + 1:3}/{args.epochs} | loss {running.get('total', 0)/n:.4f} "
+                  f"(c {running.get('concept', 0)/n:.3f} r {running.get('region_chex', 0)/n:.3f} "
+                  f"i {running.get('image_chex', 0)/n:.3f}) | [no val samples -> skip eval, save latest as best]")
         ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                 "feat_dim": feat_dim, "mode": args.mode, "head_type": args.head_type,
                 "use_global": args.use_global, "epoch": epoch,
