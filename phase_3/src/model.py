@@ -23,7 +23,7 @@ import torch.nn as nn
 
 import config
 import constants as C
-from heads import make_head
+from heads import make_disease_head, make_head
 from pooling import RegionAttentionPool
 
 
@@ -48,7 +48,7 @@ class CKAN(nn.Module):
         if mode == "A":
             self.disease_head = make_head(rdim, C.NUM_CHEX)
         elif mode == "B":
-            self.disease_head = make_head(C.NUM_CONCEPTS, C.NUM_CHEX)
+            self.disease_head = make_disease_head(C.NUM_CONCEPTS, C.NUM_CHEX)
         elif mode == "C":
             self.disease_head = make_head(rdim + C.NUM_CONCEPTS, C.NUM_CHEX)
             self.feat_leak = nn.Dropout(config.FEATURE_LEAK_DROPOUT)

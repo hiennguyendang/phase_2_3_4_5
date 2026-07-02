@@ -38,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--topk-cells", type=int, default=0,
                    help="dump top-k attention-pool grid cells per region (M5 'where'); 0 = off")
     p.add_argument("--batch", type=int, default=config.BATCH)
+    p.add_argument("--workers", type=int, default=8)
     p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
                    help="bbox source: detector (default) or gt (oracle ablation)")
     p.add_argument("--device", default="cuda")
@@ -55,7 +56,7 @@ def main() -> int:
     m.load_state_dict(ck["model"])
 
     ds = M3Dataset(args.labels_dir, args.features_root, args.split, box_source=args.box_source)
-    loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
+    loader = DataLoader(ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     written = 0

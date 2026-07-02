@@ -57,6 +57,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--region-agg", choices=["attention", "max", "mean"], default=None)
     p.add_argument("--global-head", action=argparse.BooleanOptionalAction, default=None,
                    help="global-head+gate for relational findings (--no-global-head to disable)")
+    p.add_argument("--disease-head", choices=["mlp", "linear", "nonneg", "faithful"], default=None,
+                   help="(mode B) concept->disease head; 'faithful' = masked non-neg (intervention-safe)")
     p.add_argument("--pool-heads", type=int, default=None)
     p.add_argument("--head-hidden", type=int, default=None)
     p.add_argument("--concept-dropout", type=float, default=None)
@@ -104,6 +106,7 @@ def main() -> int:
     if args.mask_bbox is not None: config.MASK_BBOX = args.mask_bbox
     if args.neck_dim is not None: config.NECK_DIM = args.neck_dim or None
     if args.region_agg is not None: config.REGION_AGG = args.region_agg
+    if args.disease_head is not None: config.DISEASE_HEAD = args.disease_head
     if args.global_head is not None: config.USE_GLOBAL_HEAD = args.global_head
     if args.pool_heads is not None: config.POOL_HEADS = args.pool_heads
     if args.head_hidden is not None: config.HEAD_HIDDEN = args.head_hidden

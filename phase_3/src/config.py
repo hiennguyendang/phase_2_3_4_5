@@ -68,6 +68,11 @@ USE_GLOBAL_HEAD = True
 HEAD_MODE = "A"
 HEAD_TYPE = "mlp"               # "mlp" now; "kan" (FastKAN) later — same interface
 HEAD_HIDDEN = 512
+# (mode B only) concept->disease head. "mlp" = free MLP (max accuracy, often FAILS the
+# intervention test). "faithful" = masked non-negative linear (each disease is a >=0 sum of ONLY
+# its mapped concepts) -> raising a concept can only raise its disease => intervention PASSES by
+# construction, at a small accuracy cost. "linear"/"nonneg" are the in-between ablations.
+DISEASE_HEAD = "mlp"            # "mlp" | "linear" | "nonneg" | "faithful"
 CONCEPT_DROPOUT = 0.1
 FEATURE_LEAK_DROPOUT = 0.3      # (C/Hybrid only) dropout on the raw-feature path into the disease
                                 # head, so disease leans on concepts -> "leaky CBM"
@@ -106,7 +111,8 @@ def env_path(name: str, default: Path) -> Path:
 # ---- architecture snapshot (so a checkpoint records exactly which toggles built it, and
 # eval/faithfulness/infer can rebuild the SAME model even for ablation runs) ----------------
 _ARCH_KEYS = ("NECK_DIM", "MASK_BBOX", "REGION_AGG", "USE_GLOBAL_HEAD", "USE_GLOBAL_TOKEN",
-              "POOL_HEADS", "HEAD_TYPE", "HEAD_HIDDEN", "CONCEPT_DROPOUT", "FEATURE_LEAK_DROPOUT")
+              "POOL_HEADS", "HEAD_TYPE", "HEAD_HIDDEN", "CONCEPT_DROPOUT", "FEATURE_LEAK_DROPOUT",
+              "DISEASE_HEAD")
 
 
 def snapshot() -> dict:

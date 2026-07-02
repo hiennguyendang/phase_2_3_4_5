@@ -115,6 +115,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--features-root", type=Path, default=config.DEFAULT_FEATURES_ROOT)
     p.add_argument("--split", default="val")
     p.add_argument("--batch", type=int, default=config.BATCH)
+    p.add_argument("--workers", type=int, default=8)
     p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
                    help="bbox source: detector (default) or gt (oracle ablation)")
     p.add_argument("--device", default="cuda")
@@ -135,7 +136,7 @@ def main() -> int:
     mode = ck["mode"]
 
     ds = M3Dataset(args.labels_dir, args.features_root, args.split, box_source=args.box_source)
-    loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
+    loader = DataLoader(ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
     print(f"[faithfulness] mode={mode} split={args.split} n={len(ds):,}\n")
 
     if mode == "A":
@@ -153,8 +154,8 @@ def main() -> int:
     if mode == "B":
         iv = intervention_test(m, loader, args.device, args.max_batches)
         ok = iv["frac_correct_direction"] >= 0.7 and iv["median_delta"] > 0.01
-        print(f"[2] concept-intervention (B): median Δ={iv['median_delta']:+.4f} "
-              f"mean Δ={iv['mean_delta']:+.4f} correct-direction={iv['frac_correct_direction']:.0%} "
+        print(f"[2] concept-intervention (B): median delta={iv['median_delta']:+.4f} "
+              f"mean delta={iv['mean_delta']:+.4f} correct-direction={iv['frac_correct_direction']:.0%} "
               f"over {iv['n_mapped_concepts']} concepts -> {'PASS (bottleneck real)' if ok else 'FAIL (fake bottleneck)'}")
         print(f"\n=> 'why'-faithful claim allowed: {bool(go and ok)}")
     else:  # C
