@@ -100,3 +100,22 @@ CONCEPT_SUPERVISED_DATASETS = ("mimic",)
 def env_path(name: str, default: Path) -> Path:
     v = os.environ.get(name)
     return Path(v) if v else default
+
+
+# ---- architecture snapshot (so a checkpoint records exactly which toggles built it, and
+# eval/faithfulness/infer can rebuild the SAME model even for ablation runs) ----------------
+_ARCH_KEYS = ("NECK_DIM", "MASK_BBOX", "REGION_AGG", "USE_GLOBAL_HEAD", "USE_GLOBAL_TOKEN",
+              "POOL_HEADS", "HEAD_TYPE", "HEAD_HIDDEN", "CONCEPT_DROPOUT", "FEATURE_LEAK_DROPOUT")
+
+
+def snapshot() -> dict:
+    """The arch-affecting config values, to store in a checkpoint."""
+    g = globals()
+    return {k: g[k] for k in _ARCH_KEYS}
+
+
+def apply(cfg: dict | None) -> None:
+    """Restore arch config from a checkpoint's snapshot (no-op for old ckpts without one)."""
+    for k, v in (cfg or {}).items():
+        if k in _ARCH_KEYS:
+            globals()[k] = v

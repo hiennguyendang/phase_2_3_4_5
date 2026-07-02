@@ -111,6 +111,7 @@ def main() -> int:
     import model as M
     args = parse_args()
     ck = torch.load(args.ckpt, map_location=args.device)
+    config.apply(ck.get("cfg", {}))                     # rebuild the exact trained architecture
     ds = M3Dataset(args.labels_dir, args.features_root, args.split, box_source=args.box_source)
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
     config.USE_GLOBAL_TOKEN = ck.get("use_global", config.USE_GLOBAL_TOKEN)

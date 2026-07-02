@@ -128,6 +128,7 @@ def main() -> int:
     import model as M
     args = parse_args()
     ck = torch.load(args.ckpt, map_location=args.device)
+    config.apply(ck.get("cfg", {}))                     # rebuild the exact trained architecture
     config.USE_GLOBAL_TOKEN = ck.get("use_global", config.USE_GLOBAL_TOKEN)
     m = M.build_model(ck["feat_dim"], ck["mode"]).to(args.device).eval()
     m.load_state_dict(ck["model"])

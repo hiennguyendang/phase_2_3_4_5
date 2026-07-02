@@ -42,15 +42,17 @@ def box_grid_disallow(boxes: torch.Tensor, gh: int, gw: int, cell: float) -> tor
 
 
 class RegionAttentionPool(nn.Module):
-    def __init__(self, feat_dim: int, n_heads: int = config.POOL_HEADS,
-                 use_global: bool = config.USE_GLOBAL_TOKEN, mask_bbox: bool = config.MASK_BBOX):
+    def __init__(self, feat_dim: int, n_heads: int | None = None,
+                 use_global: bool | None = None, mask_bbox: bool | None = None):
         super().__init__()
-        self.use_global = use_global
-        self.mask_bbox = mask_bbox
-        self.n_heads = n_heads
+        # resolve from config at build time (not import time) so train-time ablation flags + a
+        # checkpoint's config.apply() actually take effect
+        self.use_global = config.USE_GLOBAL_TOKEN if use_global is None else use_global
+        self.mask_bbox = config.MASK_BBOX if mask_bbox is None else mask_bbox
+        self.n_heads = config.POOL_HEADS if n_heads is None else n_heads
         # one learnable query per anatomical region (conditioned only on identity)
         self.region_queries = nn.Parameter(torch.randn(C.NUM_REGIONS, feat_dim) * 0.02)
-        self.attn = nn.MultiheadAttention(feat_dim, n_heads, batch_first=True)
+        self.attn = nn.MultiheadAttention(feat_dim, self.n_heads, batch_first=True)
         self.norm = nn.LayerNorm(feat_dim)
 
     def forward(self, grid: torch.Tensor, global_vec: torch.Tensor | None = None,

@@ -50,6 +50,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
                    help="bbox source for ROI-pool: detector (default) or gt (oracle ablation)")
     p.add_argument("--use-global", action="store_true")
+    # ---- architecture ablation knobs (override config; recorded in the checkpoint's "cfg") ----
+    p.add_argument("--mask-bbox", action=argparse.BooleanOptionalAction, default=None,
+                   help="mask each region query to its bbox cells (--no-mask-bbox = full grid)")
+    p.add_argument("--neck-dim", type=int, default=None, help="region neck dim (0 = off/keep 512)")
+    p.add_argument("--region-agg", choices=["attention", "max", "mean"], default=None)
+    p.add_argument("--global-head", action=argparse.BooleanOptionalAction, default=None,
+                   help="global-head+gate for relational findings (--no-global-head to disable)")
+    p.add_argument("--pool-heads", type=int, default=None)
+    p.add_argument("--head-hidden", type=int, default=None)
+    p.add_argument("--concept-dropout", type=float, default=None)
+    p.add_argument("--weight-decay", type=float, default=config.WEIGHT_DECAY)
     p.add_argument("--workers", type=int, default=2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", default="cuda")
@@ -89,6 +100,14 @@ def main() -> int:
     config.USE_GLOBAL_TOKEN = args.use_global
     random.seed(args.seed); np.random.seed(args.seed); torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+    # apply only the arch flags explicitly passed (None = keep config default)
+    if args.mask_bbox is not None: config.MASK_BBOX = args.mask_bbox
+    if args.neck_dim is not None: config.NECK_DIM = args.neck_dim or None
+    if args.region_agg is not None: config.REGION_AGG = args.region_agg
+    if args.global_head is not None: config.USE_GLOBAL_HEAD = args.global_head
+    if args.pool_heads is not None: config.POOL_HEADS = args.pool_heads
+    if args.head_hidden is not None: config.HEAD_HIDDEN = args.head_hidden
+    if args.concept_dropout is not None: config.CONCEPT_DROPOUT = args.concept_dropout
     name = args.name or f"m3_{args.mode}"
     run_dir = args.out / name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -115,7 +134,7 @@ def main() -> int:
     vl = DataLoader(val_ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
 
     model = M.build_model(feat_dim, args.mode).to(args.device)
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=config.WEIGHT_DECAY)
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
     pw = None
@@ -165,7 +184,7 @@ def main() -> int:
                 torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
                             "sched": sched.state_dict(), "feat_dim": feat_dim, "mode": args.mode,
                             "head_type": args.head_type, "use_global": args.use_global,
-                            "epoch": epoch, "best": best}, run_dir / "last.pt")
+                            "cfg": config.snapshot(), "epoch": epoch, "best": best}, run_dir / "last.pt")
                 push()
         lr_now = opt.param_groups[0]["lr"]
         sched.step()
@@ -201,7 +220,7 @@ def main() -> int:
 
         ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                 "feat_dim": feat_dim, "mode": args.mode, "head_type": args.head_type,
-                "use_global": args.use_global, "epoch": epoch,
+                "use_global": args.use_global, "cfg": config.snapshot(), "epoch": epoch,
                 "val_f1": f1, "val_auc": res["image_auc_macro"], "best": best}
         torch.save(ckpt, run_dir / "last.pt")
         if is_best:

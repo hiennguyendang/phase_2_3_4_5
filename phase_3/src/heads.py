@@ -11,9 +11,11 @@ import config
 
 
 class MLPHead(nn.Module):
-    def __init__(self, in_dim: int, out_dim: int, hidden: int = config.HEAD_HIDDEN,
-                 dropout: float = config.CONCEPT_DROPOUT):
+    def __init__(self, in_dim: int, out_dim: int, hidden: int | None = None,
+                 dropout: float | None = None):
         super().__init__()
+        hidden = config.HEAD_HIDDEN if hidden is None else hidden       # resolve at build time,
+        dropout = config.CONCEPT_DROPOUT if dropout is None else dropout  # not import time (ablations)
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden), nn.GELU(), nn.Dropout(dropout),
             nn.Linear(hidden, out_dim),
@@ -27,8 +29,9 @@ class MLPHead(nn.Module):
 # class KANHead(nn.Module): ...  # FastKAN with the same (in_dim, out_dim) signature
 
 
-def make_head(in_dim: int, out_dim: int, head_type: str = config.HEAD_TYPE,
-              hidden: int = config.HEAD_HIDDEN, dropout: float = config.CONCEPT_DROPOUT) -> nn.Module:
+def make_head(in_dim: int, out_dim: int, head_type: str | None = None,
+              hidden: int | None = None, dropout: float | None = None) -> nn.Module:
+    head_type = config.HEAD_TYPE if head_type is None else head_type    # resolve at build time
     if head_type == "mlp":
         return MLPHead(in_dim, out_dim, hidden, dropout)
     if head_type == "kan":
