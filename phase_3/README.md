@@ -21,6 +21,28 @@ features 196×512 ─pool(mask bbox)→ 29×512 ─concept→ 29×69 ─disease�
 Run all three; **faithfulness numbers (not accuracy) decide which gets the "why" claim** — see
 `scripts/6-faithfulness.py` (spec 3.4).
 
+### Mode-B concept→disease head (`config.DISEASE_HEAD` / `--disease-head`)
+A free MLP over the 69 concepts maximizes accuracy but **entangles** them → it fails the intervention
+test. The **`faithful`** head is a **masked, non-negative linear** map (`heads.ConceptDiseaseHead`):
+`logit_d = Σ_c softplus(W[d,c])·mask[d,c]·concept_c + b_d`, where the mask (from `CONCEPT_TO_CHEX`)
+restricts each disease to *its own* concepts and the weights are ≥0 — so raising a mapped concept can
+only raise its disease ⇒ **the concept-intervention test passes by construction**. Options:
+`mlp` (accuracy, entangled) · `linear` (dense, no sign) · `nonneg` (≥0, no mask) · `faithful` (≥0 + masked).
+
+## Results (silver MIMIC, preliminary — test AUC, val faithfulness)
+| run | disease head | image F1 | image AUC | region AUC | concept F1 | faithfulness verdict |
+|-----|--------------|---------:|----------:|-----------:|-----------:|----------------------|
+| **A** direct | — | 0.813 | 0.656 | 0.716 | — | where-faithful (N/A) |
+| **B** mlp | free MLP | 0.810 | 0.667 | 0.722 | 0.827 | intervention **64% → FAIL** (fake bottleneck) |
+| **B faithful** | masked non-neg | 0.794 | 0.648 | 0.719 | 0.806 | go/no-go PASS **+ intervention 100% → PASS** ✅ |
+| **C** hybrid | MLP(feat⊕concept) | ~0.81 | ~0.679 (val) | 0.722 | 0.828 | **leakage** (drop 0.015<0.02) → FAIL |
+
+**Takeaway:** accuracy is ~flat across A/B/C (ceiling set by the frozen features, not the head).
+Only **B-faithful earns the "why" claim** — for ~0.02 AUC below B-mlp it turns a fake bottleneck into a
+real one (intervention 64%→100%). B-mlp's concepts are decorative; C leaks. → **VERA ships B-faithful**
+for the concept "why", with A (where-faithful) as the unconditional fallback. (Numbers are on silver
+labels; F1 is inflated by prevalence + pos_weight at threshold 0.5 — read **AUC** as the honest metric.)
+
 ## Layout (mirrors phase_2)
 ```
 phase_3/
