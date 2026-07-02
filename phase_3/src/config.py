@@ -31,7 +31,8 @@ DEFAULT_FEATURES_ROOT = Path("/kaggle/input/mimic-biovilt-features") if ON_KAGGL
 WORK_ROOT = Path("/kaggle/working") if ON_KAGGLE else (REPO_ROOT / "phase_3" / "_work")
 DEFAULT_LABELS_DIR = REPO_ROOT / "data" / "m3_labels"      # region_concepts.npy, ... + manifest
 DEFAULT_PAIRS_PATH = REPO_ROOT / "data" / "m3_pairs.jsonl"  # prior<->current
-DEFAULT_RUNS_DIR = WORK_ROOT / "m3_runs"
+# checkpoints/logs: on Kaggle -> /kaggle/working (only writable place); off-Kaggle -> repo data/run
+DEFAULT_RUNS_DIR = Path("/kaggle/working/m3_runs") if ON_KAGGLE else (REPO_ROOT / "data" / "run")
 
 # ---- feature grid geometry ---------------------------------------------------
 GRID_H = 14
