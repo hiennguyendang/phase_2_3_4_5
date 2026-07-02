@@ -11,8 +11,12 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "src"))  # phase_3/src
 
 import argparse
+import json
+import random
+import time
 from pathlib import Path
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
@@ -47,11 +51,23 @@ def parse_args() -> argparse.Namespace:
                    help="bbox source for ROI-pool: detector (default) or gt (oracle ablation)")
     p.add_argument("--use-global", action="store_true")
     p.add_argument("--workers", type=int, default=2)
+    p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", default="cuda")
     p.add_argument("--resume", action="store_true", help="continue from last.pt (pulled from Drive if --sync-remote)")
     p.add_argument("--sync-remote", default=None, help="rclone remote, e.g. dhint:CHEX-DATA/m3_runs")
     p.add_argument("--sync-every", type=int, default=0, help="also push every N steps (0 = each epoch only)")
     return p.parse_args()
+
+
+def _nan_to_none(x):
+    """Make logged metrics strictly JSON-valid (NaN -> null) so any plotter can read them."""
+    if isinstance(x, float):
+        return None if x != x else x
+    if isinstance(x, dict):
+        return {k: _nan_to_none(v) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_nan_to_none(v) for v in x]
+    return x
 
 
 def _rclone(*a) -> None:
@@ -71,6 +87,8 @@ def main() -> int:
     args = parse_args()
     config.HEAD_TYPE = args.head_type
     config.USE_GLOBAL_TOKEN = args.use_global
+    random.seed(args.seed); np.random.seed(args.seed); torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     name = args.name or f"m3_{args.mode}"
     run_dir = args.out / name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -82,6 +100,15 @@ def main() -> int:
         raise SystemExit("[ERROR] no training samples (features missing or split empty)")
     feat_dim = train_ds.feat_dim()
     print(f"feat_dim={feat_dim} | mode={args.mode} | head={args.head_type} | global={args.use_global}")
+    # reproducibility: dump the exact run config next to the checkpoints
+    (run_dir / "config.json").write_text(json.dumps({
+        "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
+        "n_train": len(train_ds), "n_val": len(val_ds), "feat_dim": feat_dim,
+        "cfg": {"NECK_DIM": config.NECK_DIM, "USE_GLOBAL_HEAD": config.USE_GLOBAL_HEAD,
+                "MASK_BBOX": config.MASK_BBOX, "REGION_AGG": config.REGION_AGG,
+                "USE_POS_WEIGHT": config.USE_POS_WEIGHT, "HEAD_HIDDEN": config.HEAD_HIDDEN,
+                "LAMBDA_CONCEPT": config.LAMBDA_CONCEPT, "LAMBDA_REGION_CHEX": config.LAMBDA_REGION_CHEX,
+                "LAMBDA_IMAGE_CHEX": config.LAMBDA_IMAGE_CHEX}}, indent=2), encoding="utf-8")
 
     tl = DataLoader(train_ds, batch_size=args.batch, shuffle=True,
                     num_workers=args.workers, collate_fn=collate, drop_last=True)
@@ -121,6 +148,7 @@ def main() -> int:
 
     step = 0
     for epoch in range(start_epoch, args.epochs):
+        t0 = time.time()
         model.train()
         running = {}
         for batch in tl:
@@ -139,6 +167,7 @@ def main() -> int:
                             "head_type": args.head_type, "use_global": args.use_global,
                             "epoch": epoch, "best": best}, run_dir / "last.pt")
                 push()
+        lr_now = opt.param_groups[0]["lr"]
         sched.step()
         n = max(1, len(tl))
         if len(val_ds) > 0:
@@ -158,6 +187,18 @@ def main() -> int:
             print(f"epoch {epoch + 1:3}/{args.epochs} | loss {running.get('total', 0)/n:.4f} "
                   f"(c {running.get('concept', 0)/n:.3f} r {running.get('region_chex', 0)/n:.3f} "
                   f"i {running.get('image_chex', 0)/n:.3f}) | [no val samples -> skip eval, save latest as best]")
+        # append one plot-ready row per epoch (train losses, val metrics + per-class, lr, wall-time)
+        row = {"epoch": epoch + 1, "lr": lr_now, "sec": round(time.time() - t0, 1),
+               "train_loss": running.get("total", 0) / n,
+               "train_concept": running.get("concept", 0) / n,
+               "train_region_chex": running.get("region_chex", 0) / n,
+               "train_image_chex": running.get("image_chex", 0) / n,
+               "val_image_f1": res.get("image_f1_macro"), "val_image_auc": res.get("image_auc_macro"),
+               "val_region_f1": res.get("region_f1_macro"), "val_concept_f1": res.get("concept_f1_macro"),
+               "val_image_f1_per_class": res.get("image_f1_per_class"), "best": best}
+        with open(run_dir / "metrics.jsonl", "a", encoding="utf-8") as _mf:
+            _mf.write(json.dumps(_nan_to_none(row)) + "\n")
+
         ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                 "feat_dim": feat_dim, "mode": args.mode, "head_type": args.head_type,
                 "use_global": args.use_global, "epoch": epoch,
