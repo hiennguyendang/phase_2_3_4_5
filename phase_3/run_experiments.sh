@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.." || exit 1          # repo root
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 LABELS=data/m3_labels
-FEAT=data/features
+FEAT=data/features/frozen
 RUNS=data/run
 EP=${EP:-30}; BATCH=${BATCH:-512}; W=${W:-16}
 mkdir -p logs
