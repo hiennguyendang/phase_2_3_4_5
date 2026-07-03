@@ -50,10 +50,12 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     ck = torch.load(args.ckpt, map_location=args.device)
-    config.USE_GLOBAL_TOKEN = ck.get("use_global", config.USE_GLOBAL_TOKEN)
+    config.apply(ck.get("cfg", {}))                     # rebuild the EXACT trained architecture
+    config.USE_GLOBAL_TOKEN = ck.get("use_global", config.USE_GLOBAL_TOKEN)  # (disease-head, neck, ...)
     m = M.build_model(ck["feat_dim"], ck["mode"]).to(args.device).eval()
     m.load_state_dict(ck["model"])
-    print(f"[precompute] M3 mode={ck['mode']} feat_dim={ck['feat_dim']} -> region cache")
+    print(f"[precompute] M3 mode={ck['mode']} disease_head={config.DISEASE_HEAD} "
+          f"feat_dim={ck['feat_dim']} -> region cache")
 
     ds = M3Dataset(args.labels_dir, args.features_root, split=None)   # ALL images (curr + prior)
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
