@@ -39,6 +39,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out-dir", type=Path, default=config.REPO_ROOT / "data" / "m3_region_cache"
                    if hasattr(config, "REPO_ROOT") else Path("data/m3_region_cache"))
     p.add_argument("--batch", type=int, default=config.BATCH)
+    p.add_argument("--workers", type=int, default=8,
+                   help="DataLoader workers — feature .pt loads are the bottleneck, keep this high")
     p.add_argument("--device", default="cuda")
     return p.parse_args()
 
@@ -58,13 +60,24 @@ def main() -> int:
           f"feat_dim={ck['feat_dim']} -> region cache")
 
     ds = M3Dataset(args.labels_dir, args.features_root, split=None)   # ALL images (curr + prior)
-    loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
-    print(f"[precompute] {len(ds):,} images with features")
+    total = len(ds)
+    # RESUMABLE: skip images already cached so a killed run continues instead of restarting from 0
+    # (and workers don't waste time loading features for images we'd only re-write).
+    done = {p.stem for p in args.out_dir.glob("*.npy")}
+    if done:
+        ds.rows = [(i, iid) for (i, iid) in ds.rows if iid not in done]
+    pin = args.device.startswith("cuda")
+    loader = DataLoader(ds, batch_size=args.batch, num_workers=args.workers,
+                        collate_fn=collate, pin_memory=pin, persistent_workers=args.workers > 0)
+    print(f"[precompute] {total:,} images total | {len(done):,} already cached | "
+          f"{len(ds):,} to do | device={args.device} workers={args.workers} batch={args.batch}")
 
+    import time
+    t0 = time.time()
     written = 0
     for b in loader:
-        out = m(b["grid"].to(args.device), b["global"].to(args.device),
-                b["present_mask"].to(args.device), b["boxes"].to(args.device))
+        out = m(b["grid"].to(args.device, non_blocking=pin), b["global"].to(args.device, non_blocking=pin),
+                b["present_mask"].to(args.device, non_blocking=pin), b["boxes"].to(args.device, non_blocking=pin))
         feat = out["region_feats"].cpu().numpy()                     # [B,29,feat]
         logit = out["region_disease_logits"].cpu().numpy()           # [B,29,14]
         arr = np.concatenate([feat, logit], axis=-1).astype(np.float16)  # [B,29,feat+14]
@@ -72,8 +85,10 @@ def main() -> int:
             np.save(args.out_dir / f"{iid}.npy", arr[j])
             written += 1
         if written % 5000 < args.batch:
-            print(f"  {written:,} cached ...")
-    print(f"[DONE] {written:,} region caches -> {args.out_dir}")
+            rate = written / max(time.time() - t0, 1e-6)
+            eta = (len(ds) - written) / max(rate, 1e-6) / 60
+            print(f"  {written:,}/{len(ds):,} cached | {rate:.0f} img/s | ETA {eta:.1f} min")
+    print(f"[DONE] {written:,} new region caches ({len(done) + written:,}/{total:,} total) -> {args.out_dir}")
     return 0
 
 

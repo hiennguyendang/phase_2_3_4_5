@@ -27,14 +27,13 @@ EP=${EP:-40}; BATCH=${BATCH:-64}; W=${W:-8}
 mkdir -p logs
 
 # ---- bridge (GPU, once): freeze B-faithful M3 -> region_feat‖logit for every image ----
-if ls "$CACHE"/*.npy >/dev/null 2>&1; then
-  echo "[skip bridge] region cache already populated at $CACHE"
-else
-  echo "===== BRIDGE: precompute region cache from $M3_CKPT ====="
-  python3 phase_3/scripts/8-precompute_regions.py --ckpt "$M3_CKPT" \
-    --labels-dir "$M3LAB" --features-root "$FEAT" --out-dir "$CACHE" \
-    2>&1 | tee logs/m4_bridge.log
-fi
+# Resumable + parallel: skips already-cached images, so re-running is cheap and a killed run
+# continues. (Feature .pt loads are the bottleneck -> keep W high to feed the GPU.)
+echo "===== BRIDGE: precompute region cache from $M3_CKPT (workers=$W) ====="
+python3 phase_3/scripts/8-precompute_regions.py --ckpt "$M3_CKPT" \
+  --labels-dir "$M3LAB" --features-root "$FEAT" --out-dir "$CACHE" \
+  --batch "$BATCH" --workers "$W" --device cuda \
+  2>&1 | tee logs/m4_bridge.log
 
 run () {                                    # run <name> <train flags...>
   name="$1"; shift
