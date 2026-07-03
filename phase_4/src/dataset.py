@@ -67,21 +67,23 @@ def _present_by_image(m3_labels_dir: Path) -> dict[str, np.ndarray]:
     return out
 
 
-def _prior_by_image(pairs_path: Path) -> dict[str, str]:
-    out: dict[str, str] = {}
+def _prior_by_image(pairs_path: Path) -> dict[str, tuple[str, bool]]:
+    """image_id -> (prior_image_id, same_view). `same_view` from m3_pairs.jsonl (default True if absent)."""
+    out: dict[str, tuple[str, bool]] = {}
     with open(pairs_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             r = json.loads(line)
-            out[r["image_id"]] = r["prior_image_id"]
+            out[r["image_id"]] = (r["prior_image_id"], bool(r.get("same_view", True)))
     return out
 
 
 class M4Dataset(Dataset):
     def __init__(self, region_cache, m3_labels_dir, m4_labels_dir, pairs_path,
-                 split: str | None = None, augment: bool = False):
+                 split: str | None = None, augment: bool = False,
+                 same_view_only: bool = False):
         # time-flip augmentation is TRAIN ONLY (constraint 2). The flip stays within the train pairs
         # (constraint 1): we only generate (C,P) from a (P,C) that is already in this split.
         self.augment = augment
@@ -93,9 +95,10 @@ class M4Dataset(Dataset):
         present = _present_by_image(m3_labels_dir)
         prior = _prior_by_image(pairs_path)
 
+        self.same_view_only = same_view_only
         manifest = [json.loads(l) for l in open(Path(m4_labels_dir) / "manifest.jsonl", encoding="utf-8")]
         self.rows: list[tuple[int, str, str]] = []        # (prog_row, curr_id, prior_id)
-        skipped = {"no_cue": 0, "no_prior": 0, "no_cache": 0, "no_present": 0, "split": 0}
+        skipped = {"no_cue": 0, "no_prior": 0, "no_cache": 0, "no_present": 0, "split": 0, "cross_view": 0}
         for i, m in enumerate(manifest):
             if not m.get("ok", True):
                 continue
@@ -104,9 +107,12 @@ class M4Dataset(Dataset):
             if m.get("n_cued", 0) <= 0:
                 skipped["no_cue"] += 1; continue
             cid = m["image_id"]
-            pid = prior.get(cid)
-            if pid is None:
+            pr = prior.get(cid)
+            if pr is None:
                 skipped["no_prior"] += 1; continue
+            pid, same_view = pr
+            if same_view_only and not same_view:            # (b) drop cross-ViewPosition pairs
+                skipped["cross_view"] += 1; continue
             if not (self.cache.has(cid) and self.cache.has(pid)):
                 skipped["no_cache"] += 1; continue
             if cid not in present or pid not in present:

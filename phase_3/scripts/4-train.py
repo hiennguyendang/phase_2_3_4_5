@@ -47,6 +47,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--batch", type=int, default=config.BATCH)
     p.add_argument("--lr", type=float, default=config.LR)
     p.add_argument("--head-type", default=config.HEAD_TYPE)
+    p.add_argument("--select-by", choices=["auc", "f1"], default="auc",
+                   help="val metric that selects best.pt. 'auc' (default, the honest metric) or "
+                        "'f1' (prevalence-inflated at thr 0.5 — kept only for legacy reproduction)")
     p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
                    help="bbox source for ROI-pool: detector (default) or gt (oracle ablation)")
     p.add_argument("--use-global", action="store_true")
@@ -194,15 +197,16 @@ def main() -> int:
         n = max(1, len(tl))
         if len(val_ds) > 0:
             res = evaluate(model, vl, args.device)
-            f1 = res["image_f1_macro"]          # headline metric for checkpoint selection (spec 3.6)
+            f1 = res["image_f1_macro"]
+            sel = res["image_auc_macro"] if args.select_by == "auc" else f1   # checkpoint selector
             print(f"epoch {epoch + 1:3}/{args.epochs} | loss {running.get('total', 0)/n:.4f} "
                   f"(c {running.get('concept', 0)/n:.3f} r {running.get('region_chex', 0)/n:.3f} "
                   f"i {running.get('image_chex', 0)/n:.3f}) | val img-F1 {f1:.4f} "
                   f"AUC {res['image_auc_macro']:.4f} | region F1 {res['region_f1_macro']:.4f}"
                   + (f" | concept F1 {res.get('concept_f1_macro', float('nan')):.4f}" if "concept_f1_macro" in res else ""))
-            is_best = f1 > best
+            is_best = sel > best                # select on AUC by default (honest metric)
             if is_best:
-                best = f1
+                best = sel
         else:  # no val features (e.g. a PARTIAL feature cache) -> can't select on val; keep latest as best
             res = {"image_f1_macro": float("nan"), "image_auc_macro": float("nan")}
             f1, is_best = float("nan"), True
@@ -230,7 +234,7 @@ def main() -> int:
             torch.save(ckpt, run_dir / "best.pt")
         push()                                  # Drive checkpoint each epoch
 
-    print(f"\n[DONE] best val image-F1 = {best:.4f} -> {run_dir/'best.pt'}")
+    print(f"\n[DONE] best val image-{args.select_by.upper()} = {best:.4f} -> {run_dir/'best.pt'}")
     return 0
 
 

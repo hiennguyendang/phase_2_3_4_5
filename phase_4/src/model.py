@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 import config
 import constants as C
@@ -37,10 +38,14 @@ def region_in_dim(feat_dim: int, input_mode: str = config.INPUT_MODE) -> int:
 class TKAN(nn.Module):
     def __init__(self, feat_dim: int, head_type: str = config.HEAD_TYPE,
                  input_mode: str = config.INPUT_MODE, hidden: int = config.HEAD_HIDDEN,
-                 dropout: float = config.HEAD_DROPOUT):
+                 dropout: float = config.HEAD_DROPOUT, head_mode: str = config.HEAD_MODE):
         super().__init__()
+        if head_mode not in ("flat", "twostage"):
+            raise ValueError(f"unknown head_mode: {head_mode}")
         self.feat_dim = feat_dim
         self.input_mode = input_mode
+        self.head_mode = head_mode
+        # same head width in both modes (14*3); twostage only REINTERPRETS the 3 outputs/disease.
         self.head = make_head(region_in_dim(feat_dim, input_mode), C.NUM_CHEX * C.NUM_PROG,
                               head_type, hidden, dropout)
 
@@ -59,14 +64,25 @@ class TKAN(nn.Module):
         raise ValueError(f"unknown input_mode: {m}")
 
     def forward(self, feat_curr, logit_curr, feat_prior, logit_prior) -> torch.Tensor:
-        """all [B,29,*] -> progression logits [B,29,14,3]."""
+        """all [B,29,*] -> progression logits [B,29,14,3] (order: stable, improved, worsened)."""
         x = self._compose(feat_curr, logit_curr, feat_prior, logit_prior)   # [B,29,in]
         out = self.head(x)                                                  # [B,29,14*3]
         b, r, _ = out.shape
-        return out.view(b, r, C.NUM_CHEX, C.NUM_PROG)
+        out = out.view(b, r, C.NUM_CHEX, C.NUM_PROG)                        # [B,29,14,3]
+        if self.head_mode == "flat":
+            return out
+        # twostage: split the 3 outputs/disease into 1 change gate + 2 direction logits, then
+        # compose factorized log-probs P(stable)=1-s, P(improved)=s*d_i, P(worsened)=s*d_w.
+        # Returned as "logits": they sum-to-1 in prob space, so downstream softmax/argmax are
+        # unchanged and CE(composed, y) == BCE(change) + CE(direction on change cells) exactly.
+        change = out[..., 0]                                   # [B,29,14]
+        log_no = F.logsigmoid(-change)                         # log P(stable)
+        log_ch = F.logsigmoid(change)                          # log P(change)
+        dir_lp = F.log_softmax(out[..., 1:3], dim=-1)          # [B,29,14,2] (improved, worsened)
+        return torch.stack([log_no, log_ch + dir_lp[..., 0], log_ch + dir_lp[..., 1]], dim=-1)
 
 
 def build_model(feat_dim: int, head_type: str = config.HEAD_TYPE,
                 input_mode: str = config.INPUT_MODE, hidden: int = config.HEAD_HIDDEN,
-                dropout: float = config.HEAD_DROPOUT) -> TKAN:
-    return TKAN(feat_dim, head_type, input_mode, hidden, dropout)
+                dropout: float = config.HEAD_DROPOUT, head_mode: str = config.HEAD_MODE) -> TKAN:
+    return TKAN(feat_dim, head_type, input_mode, hidden, dropout, head_mode)

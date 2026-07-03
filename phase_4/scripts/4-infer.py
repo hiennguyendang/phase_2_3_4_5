@@ -43,12 +43,13 @@ def parse_args() -> argparse.Namespace:
 
 @torch.no_grad()
 def main() -> int:
-    from eval import build_from_ckpt
+    from eval import build_from_ckpt, dataset_kwargs
     args = parse_args()
     ck = torch.load(args.ckpt, map_location=args.device)
     m = build_from_ckpt(ck, args.device).eval()             # sets config.REQUIRE_PRIOR_PRESENT first
 
-    ds = M4Dataset(args.region_cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split)
+    ds = M4Dataset(args.region_cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split,
+                   **dataset_kwargs(ck))
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
     args.out.parent.mkdir(parents=True, exist_ok=True)
 

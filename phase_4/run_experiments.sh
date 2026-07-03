@@ -16,14 +16,14 @@ cd "$(dirname "$0")/.." || exit 1          # repo root
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 # ---- paths (override via env if your server layout differs) ------------------
-M3_CKPT=${M3_CKPT:-data/m3_B_faithful/best.pt}     # shipping frozen M3 (mode B-faithful)
-FEAT=${FEAT:-data/features}                        # BioViL-T .pt feature cache
+M3_CKPT=${M3_CKPT:-data/run/m3_B_faithful/best.pt}
+FEAT=${FEAT:-data/features/frozen}
 M3LAB=${M3LAB:-data/m3_labels}
 M4LAB=${M4LAB:-data/m4_labels}
 PAIRS=${PAIRS:-data/m4_labels/m3_pairs.jsonl}
-CACHE=${CACHE:-data/m3_region_cache}
+CACHE=${CACHE:-data/m4_region_cache}
 RUNS=${RUNS:-data/run}
-EP=${EP:-40}; BATCH=${BATCH:-64}; W=${W:-8}
+EP=${EP:-30}; BATCH=${BATCH:-128}; W=${W:-16}
 mkdir -p logs
 
 # ---- bridge (GPU, once): freeze B-faithful M3 -> region_feat‖logit for every image ----

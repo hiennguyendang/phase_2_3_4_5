@@ -50,6 +50,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--dropout", type=float, default=config.HEAD_DROPOUT)
     p.add_argument("--loss", default=config.LOSS_TYPE, choices=["ce", "focal"])
     p.add_argument("--focal-gamma", type=float, default=config.FOCAL_GAMMA)
+    p.add_argument("--head-mode", default=config.HEAD_MODE, choices=["flat", "twostage"],
+                   help="(c) flat 3-way softmax, or factorized change x direction")
+    p.add_argument("--same-view", action="store_true",
+                   help="(b) keep only same-ViewPosition prior pairs (eval inherits this from the ckpt)")
+    p.add_argument("--select-metric", default=config.SELECT_METRIC, choices=["macro", "change"],
+                   help="(a) which val metric selects best.pt")
+    p.add_argument("--patience", type=int, default=config.PATIENCE,
+                   help="(a) early-stop after N evals with no val improvement (0 = off)")
     p.add_argument("--no-class-weight", action="store_true", help="disable inverse-freq class weighting")
     p.add_argument("--no-require-prior", action="store_true",
                    help="supervise cells present in CURRENT only (default: require prior present too)")
@@ -80,23 +88,27 @@ def main() -> int:
     # config toggles read globally downstream (heads defaults, dataset masking) — set before use.
     config.HEAD_TYPE = args.head_type
     config.INPUT_MODE = args.input_mode
+    config.HEAD_MODE = args.head_mode
     config.REQUIRE_PRIOR_PRESENT = not args.no_require_prior
     run_dir = args.out / args.name
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cache = RegionCache(args.region_cache)
     train_ds = M4Dataset(cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, "train",
-                         augment=config.AUGMENT_TIME_FLIP and not args.no_augment)
-    val_ds = M4Dataset(cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, "val")  # never augmented
+                         augment=config.AUGMENT_TIME_FLIP and not args.no_augment,
+                         same_view_only=args.same_view)
+    val_ds = M4Dataset(cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, "val",
+                       same_view_only=args.same_view)  # never augmented; same view filter as train
     n_base = len(train_ds.rows)
-    print(f"train={len(train_ds):,} (base {n_base:,}, augment={train_ds.augment}) "
-          f"val={len(val_ds):,} | skipped(train)={train_ds.skipped}")
+    print(f"train={len(train_ds):,} (base {n_base:,}, augment={train_ds.augment}, "
+          f"same_view={args.same_view}) val={len(val_ds):,} | skipped(train)={train_ds.skipped}")
     if len(train_ds) == 0:
         raise SystemExit("[ERROR] no training pairs (cache/prior/labels missing?)")
     feat_dim = train_ds.feat_dim
     print(f"feat_dim={feat_dim} | input={args.input_mode} | "
-          f"region_in_dim={M.region_in_dim(feat_dim, args.input_mode)} | head={args.head_type} | "
-          f"loss={args.loss} | require_prior={config.REQUIRE_PRIOR_PRESENT}")
+          f"region_in_dim={M.region_in_dim(feat_dim, args.input_mode)} | head={args.head_type}/{args.head_mode} | "
+          f"loss={args.loss} | require_prior={config.REQUIRE_PRIOR_PRESENT} | "
+          f"select={args.select_metric} patience={args.patience}")
 
     weight = None
     if config.USE_CLASS_WEIGHT and not args.no_class_weight:
@@ -109,10 +121,12 @@ def main() -> int:
                     num_workers=args.workers, collate_fn=collate, drop_last=True)
     vl = DataLoader(val_ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
 
-    model = M.build_model(feat_dim, args.head_type, args.input_mode, args.hidden, args.dropout).to(args.device)
-    # model-rebuild cfg — persisted in every ckpt so eval.py/infer.py reconstruct the exact head.
+    model = M.build_model(feat_dim, args.head_type, args.input_mode, args.hidden, args.dropout,
+                          args.head_mode).to(args.device)
+    # model-rebuild cfg — persisted in every ckpt so eval.py/infer.py reconstruct the exact head + data gates.
     mcfg = {"feat_dim": feat_dim, "head_type": args.head_type, "input_mode": args.input_mode,
             "hidden": args.hidden, "dropout": args.dropout, "loss": args.loss,
+            "head_mode": args.head_mode, "same_view": args.same_view,
             "require_prior_present": config.REQUIRE_PRIOR_PRESENT}
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=config.WEIGHT_DECAY)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
@@ -137,7 +151,7 @@ def main() -> int:
         else:
             print("[resume] no last.pt -> fresh start")
 
-    step = 0
+    step, stale = 0, 0
     for epoch in range(start_epoch, args.epochs):
         model.train()
         run_loss, run_n = 0.0, 0
@@ -157,21 +171,30 @@ def main() -> int:
         sched.step()
         res = evaluate(model, vl, args.device)
         f1 = res["prog_f1_macro"]
+        # (a) select best.pt by the chosen val metric (macro = old behaviour, change = headline)
+        sel = res["change_f1_macro"] if args.select_metric == "change" else f1
         print(f"epoch {epoch + 1:3}/{args.epochs} | loss {run_loss/max(run_n,1):.4f} | "
               f"val prog-F1 {f1:.4f} change-F1 {res['change_f1_macro']:.4f} "
               f"(per {{ {', '.join(f'{k}:{v:.2f}' for k,v in res['per_class'].items())} }})")
 
-        is_best = f1 > best
+        is_best = sel > best
         if is_best:
-            best = f1
+            best = sel; stale = 0
+        else:
+            stale += 1
         ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
-                "epoch": epoch, "val_f1": f1, "best": best, **mcfg}
+                "epoch": epoch, "val_f1": f1, "val_change_f1": res["change_f1_macro"],
+                "select_metric": args.select_metric, "best": best, **mcfg}
         torch.save(ckpt, run_dir / "last.pt")
         if is_best:
             torch.save(ckpt, run_dir / "best.pt")
         push()
+        if args.patience and stale >= args.patience:      # (a) early stop
+            print(f"[early-stop] no val-{args.select_metric} gain in {args.patience} evals "
+                  f"(best {best:.4f})")
+            break
 
-    print(f"\n[DONE] best val prog-F1 = {best:.4f} -> {run_dir/'best.pt'}")
+    print(f"\n[DONE] best val {args.select_metric}-F1 = {best:.4f} -> {run_dir/'best.pt'}")
     return 0
 
 

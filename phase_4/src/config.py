@@ -43,6 +43,15 @@ HEAD_HIDDEN = 512
 HEAD_DROPOUT = 0.1
 KAN_GRIDS = 8                   # FastKAN: #RBF centers per input dim (ablation head only)
 
+# (c) prediction structure — how the 3 classes are produced from the head output.
+#   flat     one 3-way softmax over {stable, improved, worsened}          (baseline)
+#   twostage factorized: P(change) [stable vs change] x P(dir|change) [improved vs worsened].
+#            Separates the EASY sub-task (did it change?) from the HARD one (which direction?),
+#            and targets the weak `improved` class. Same head width (14x3), reinterpreted; the
+#            composed log-probs are returned as "logits" so eval/infer/loss stay unchanged —
+#            plain cross-entropy on them decomposes EXACTLY into BCE(change)+CE(direction).
+HEAD_MODE = "flat"
+
 # ---- input composition (spec 4.2) --------------------------------------------
 # What the per-region head sees. Ablation axis: where does the progression signal live?
 #   full   [feat_curr ; feat_prior ; feat_curr-feat_prior ; logit_curr ; logit_prior]  (baseline)
@@ -58,12 +67,23 @@ FOCAL_GAMMA = 2.0
 
 REQUIRE_PRIOR_PRESENT = True    # a region is supervised only if present in BOTH curr and prior
 
+# (b) prior view alignment. Cross-view pairs (PA prior vs AP current, lateral) make feat_curr-feat_prior
+# noise -> the Siamese fails silently. `m3_pairs.jsonl` carries a `same_view` flag; when True we keep
+# ONLY same-ViewPosition pairs. Default False = old behaviour (all pairs). Eval/infer inherit the
+# training value from the ckpt so the test set matches.
+SAME_VIEW_ONLY = False
+
 # ---- training ----------------------------------------------------------------
 LR = 3e-4
 WEIGHT_DECAY = 1e-4
 EPOCHS = 40
 BATCH = 64
 USE_CLASS_WEIGHT = True         # "stable" dominates -> inverse-frequency weighting (spec 4.4)
+# (a) checkpoint selection. Val curves peak by epoch ~1-10 then overfit, and best.pt historically
+# tracked macro-F1 while the HEADLINE is change-only F1. Pick which val metric selects best.pt, and
+# optionally early-stop after PATIENCE evals with no improvement (0 = off, old behaviour).
+SELECT_METRIC = "macro"         # "macro" (old) | "change"
+PATIENCE = 0
 
 # ---- time-flip augmentation (TRAIN ONLY) -------------------------------------
 # Doubles train pairs by flipping (prior,current)->(current,prior) with labels improved<->worsened.
