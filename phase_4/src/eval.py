@@ -15,25 +15,30 @@ from torch.utils.data import DataLoader
 
 import config
 import constants as C
-from dataset import M4Dataset, collate
+from dataset import collate, make_dataset, move_batch
 
 
 def build_from_ckpt(ck: dict, device):
-    """Rebuild the exact M4 model a ckpt was trained with (head_type / input_mode / head_mode /
+    """Rebuild the exact M4 model a ckpt was trained with (arch / head_type / input_mode / head_mode /
     hidden / dropout), defaulting to the shipping baseline for old ckpts that only stored feat_dim.
     Also restores the prior-present masking so eval scores the same cell set training supervised."""
     import model as M
     config.REQUIRE_PRIOR_PRESENT = ck.get("require_prior_present", config.REQUIRE_PRIOR_PRESENT)
     m = M.build_model(ck["feat_dim"], ck.get("head_type", "mlp"), ck.get("input_mode", "full"),
                       ck.get("hidden", config.HEAD_HIDDEN), ck.get("dropout", config.HEAD_DROPOUT),
-                      ck.get("head_mode", "flat"))
+                      ck.get("head_mode", "flat"), ck.get("arch", "regiondiff"),
+                      ck.get("fuse_blocks", config.FUSE_BLOCKS))
     m.load_state_dict(ck["model"])
     return m.to(device)
 
 
-def dataset_kwargs(ck: dict) -> dict:
-    """Data-gate options a ckpt was trained with, so eval/infer build the MATCHING test set."""
-    return {"same_view_only": ck.get("same_view", False)}
+def dataset_from_ckpt(ck: dict, m3_labels_dir, m4_labels_dir, pairs, split, *,
+                      region_cache, features_root):
+    """Build the split dataset MATCHING a ckpt (same arch / same_view / box_source as training)."""
+    return make_dataset(ck.get("arch", "regiondiff"), m3_labels_dir, m4_labels_dir, pairs, split,
+                        region_cache=region_cache, features_root=features_root,
+                        same_view_only=ck.get("same_view", False),
+                        box_source=ck.get("box_source", config.BOX_SOURCE))
 
 
 def multiclass_f1(pred: np.ndarray, tgt: np.ndarray) -> tuple[float, dict, float]:
@@ -55,8 +60,7 @@ def evaluate(model, loader, device) -> dict:
     model.eval()
     preds, tgts = [], []
     for b in loader:
-        logits = model(b["feat_curr"].to(device), b["logit_curr"].to(device),
-                       b["feat_prior"].to(device), b["logit_prior"].to(device))   # [B,29,14,3]
+        logits = model(move_batch(b, device))                                      # [B,29,14,3]
         target = b["progression"]                                                  # [B,29,14]
         valid = (target != C.UNKNOWN) & b["region_mask"].bool().unsqueeze(-1)
         pred = logits.argmax(-1).cpu()
@@ -74,6 +78,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Evaluate an M4 checkpoint")
     p.add_argument("--ckpt", type=Path, required=True)
     p.add_argument("--region-cache", type=Path, default=config.DEFAULT_REGION_CACHE)
+    p.add_argument("--features-root", type=Path, default=config.DEFAULT_FEATURES_ROOT)
     p.add_argument("--m3-labels-dir", type=Path, default=config.DEFAULT_M3_LABELS_DIR)
     p.add_argument("--m4-labels-dir", type=Path, default=config.DEFAULT_M4_LABELS_DIR)
     p.add_argument("--pairs", type=Path, default=config.DEFAULT_PAIRS_PATH)
@@ -87,8 +92,8 @@ def main() -> int:
     args = parse_args()
     ck = torch.load(args.ckpt, map_location=args.device)
     m = build_from_ckpt(ck, args.device)                    # sets config.REQUIRE_PRIOR_PRESENT first
-    ds = M4Dataset(args.region_cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split,
-                   **dataset_kwargs(ck))
+    ds = dataset_from_ckpt(ck, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split,
+                           region_cache=args.region_cache, features_root=args.features_root)
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
     res = evaluate(m, loader, args.device)
     print(f"[{args.split}] prog macro-F1 = {res['prog_f1_macro']:.4f}  "

@@ -1,11 +1,15 @@
-"""M4 T-KAN: per-region temporal progression from frozen-M3 region tensors (spec 4.1-4.3).
+"""M4 per-region temporal progression. Two architectures, both -> [B,29,14,3] and both taking a
+batch dict so train/eval/infer call `model(batch)` uniformly:
 
-Siamese-by-construction: the shared frozen branch already ran in phase_3/precompute_regions.py, so
-here we only consume its cached outputs. Per region the head sees a composition of (spec 4.2):
-    feat_curr / feat_prior           (frozen-M3 region features, feat_dim each)
-    logit_curr / logit_prior         (frozen-M3 disease logits, 14 each; soft — magnitude matters)
-selected by `input_mode` (ablation axis; see config.INPUT_MODE). Output: 29 x 14 x 3 progression
-logits regardless of input_mode (only the head's in_dim changes).
+  regiondiff (v1)  consume the frozen-M3 REGION cache; per region the head sees a composition of
+      feat_curr/feat_prior (region features) + logit_curr/logit_prior (M3 disease logits), selected
+      by `input_mode`. Cheap, but M3's static pooling can wash out localised change.
+
+  tempfuse         read frozen M1 PATCH grids (196xC) for curr+prior; cross-attend current<-prior
+      (BioViL-T-style soft registration) BEFORE pooling, then M4's OWN bbox-guided region pool ->
+      per-region temporal feature -> head. Preserves localised change; pool alpha = faithful "where".
+
+`head_mode` (flat | twostage) and the flat/twostage composition are shared by both archs.
 """
 
 from __future__ import annotations
@@ -17,8 +21,9 @@ import torch.nn.functional as F
 import config
 import constants as C
 from heads import make_head
+from pooling import BBoxRegionPool, CrossAttnFuse
 
-# in_dim per input_mode, as a multiple of (feat_dim, NUM_CHEX)
+# in_dim per input_mode, as a multiple of (feat_dim, NUM_CHEX)  [regiondiff only]
 _MODE_DIMS = {
     "full":   (3, 2),   # [c ; p ; c-p ; lc ; lp]
     "concat": (2, 2),   # [c ; p ; lc ; lp]         (no explicit difference)
@@ -35,17 +40,34 @@ def region_in_dim(feat_dim: int, input_mode: str = config.INPUT_MODE) -> int:
     return nf * feat_dim + nl * C.NUM_CHEX
 
 
+def _finish(out: torch.Tensor, head_mode: str) -> torch.Tensor:
+    """[B,29,14*3] head output -> [B,29,14,3] progression logits (order: stable, improved, worsened).
+    flat = raw 3-way logits; twostage = factorized P(change) x P(direction) returned as summing-to-1
+    log-probs (so softmax/argmax unchanged and CE == BCE(change)+CE(direction) exactly)."""
+    b, r, _ = out.shape
+    out = out.view(b, r, C.NUM_CHEX, C.NUM_PROG)
+    if head_mode == "flat":
+        return out
+    change = out[..., 0]                                       # [B,29,14] change gate
+    log_no = F.logsigmoid(-change)                             # log P(stable)
+    log_ch = F.logsigmoid(change)                             # log P(change)
+    dir_lp = F.log_softmax(out[..., 1:3], dim=-1)             # [B,29,14,2] (improved, worsened)
+    return torch.stack([log_no, log_ch + dir_lp[..., 0], log_ch + dir_lp[..., 1]], dim=-1)
+
+
 class TKAN(nn.Module):
+    """regiondiff arch — consumes the frozen-M3 region cache."""
+
     def __init__(self, feat_dim: int, head_type: str = config.HEAD_TYPE,
                  input_mode: str = config.INPUT_MODE, hidden: int = config.HEAD_HIDDEN,
                  dropout: float = config.HEAD_DROPOUT, head_mode: str = config.HEAD_MODE):
         super().__init__()
         if head_mode not in ("flat", "twostage"):
             raise ValueError(f"unknown head_mode: {head_mode}")
+        self.arch = "regiondiff"
         self.feat_dim = feat_dim
         self.input_mode = input_mode
         self.head_mode = head_mode
-        # same head width in both modes (14*3); twostage only REINTERPRETS the 3 outputs/disease.
         self.head = make_head(region_in_dim(feat_dim, input_mode), C.NUM_CHEX * C.NUM_PROG,
                               head_type, hidden, dropout)
 
@@ -63,26 +85,45 @@ class TKAN(nn.Module):
             return torch.cat([fc, fp, fc - fp], dim=-1)
         raise ValueError(f"unknown input_mode: {m}")
 
-    def forward(self, feat_curr, logit_curr, feat_prior, logit_prior) -> torch.Tensor:
-        """all [B,29,*] -> progression logits [B,29,14,3] (order: stable, improved, worsened)."""
-        x = self._compose(feat_curr, logit_curr, feat_prior, logit_prior)   # [B,29,in]
-        out = self.head(x)                                                  # [B,29,14*3]
-        b, r, _ = out.shape
-        out = out.view(b, r, C.NUM_CHEX, C.NUM_PROG)                        # [B,29,14,3]
-        if self.head_mode == "flat":
-            return out
-        # twostage: split the 3 outputs/disease into 1 change gate + 2 direction logits, then
-        # compose factorized log-probs P(stable)=1-s, P(improved)=s*d_i, P(worsened)=s*d_w.
-        # Returned as "logits": they sum-to-1 in prob space, so downstream softmax/argmax are
-        # unchanged and CE(composed, y) == BCE(change) + CE(direction on change cells) exactly.
-        change = out[..., 0]                                   # [B,29,14]
-        log_no = F.logsigmoid(-change)                         # log P(stable)
-        log_ch = F.logsigmoid(change)                          # log P(change)
-        dir_lp = F.log_softmax(out[..., 1:3], dim=-1)          # [B,29,14,2] (improved, worsened)
-        return torch.stack([log_no, log_ch + dir_lp[..., 0], log_ch + dir_lp[..., 1]], dim=-1)
+    def forward(self, batch: dict) -> torch.Tensor:
+        x = self._compose(batch["feat_curr"], batch["logit_curr"],
+                          batch["feat_prior"], batch["logit_prior"])          # [B,29,in]
+        return _finish(self.head(x), self.head_mode)
+
+
+class TempFuseTKAN(nn.Module):
+    """tempfuse arch — patch-level cross-attention fusion + M4's own bbox-guided region pool."""
+
+    def __init__(self, feat_dim: int, head_type: str = config.HEAD_TYPE,
+                 hidden: int = config.HEAD_HIDDEN, dropout: float = config.HEAD_DROPOUT,
+                 head_mode: str = config.HEAD_MODE, fuse_blocks: int = config.FUSE_BLOCKS,
+                 fuse_heads: int = config.FUSE_HEADS):
+        super().__init__()
+        if head_mode not in ("flat", "twostage"):
+            raise ValueError(f"unknown head_mode: {head_mode}")
+        self.arch = "tempfuse"
+        self.feat_dim = feat_dim
+        self.head_mode = head_mode
+        self.fuse = nn.ModuleList([CrossAttnFuse(feat_dim, fuse_heads, dropout)
+                                   for _ in range(fuse_blocks)])
+        self.pool = BBoxRegionPool(feat_dim, config.POOL_HEADS)
+        self.head = make_head(feat_dim, C.NUM_CHEX * C.NUM_PROG, head_type, hidden, dropout)
+
+    def forward(self, batch: dict, return_alpha: bool = False):
+        cur, prior = batch["patch_curr"], batch["patch_prior"]                # [B,196,dim]
+        for blk in self.fuse:
+            cur = blk(cur, prior)                                             # current<-prior fusion
+        region, alpha = self.pool(cur, batch["box_curr"])                     # [B,29,dim],[B,29,196]
+        out = _finish(self.head(region), self.head_mode)                      # [B,29,14,3]
+        return (out, alpha) if return_alpha else out
 
 
 def build_model(feat_dim: int, head_type: str = config.HEAD_TYPE,
                 input_mode: str = config.INPUT_MODE, hidden: int = config.HEAD_HIDDEN,
-                dropout: float = config.HEAD_DROPOUT, head_mode: str = config.HEAD_MODE) -> TKAN:
-    return TKAN(feat_dim, head_type, input_mode, hidden, dropout, head_mode)
+                dropout: float = config.HEAD_DROPOUT, head_mode: str = config.HEAD_MODE,
+                arch: str = config.ARCH, fuse_blocks: int = config.FUSE_BLOCKS):
+    if arch == "regiondiff":
+        return TKAN(feat_dim, head_type, input_mode, hidden, dropout, head_mode)
+    if arch == "tempfuse":
+        return TempFuseTKAN(feat_dim, head_type, hidden, dropout, head_mode, fuse_blocks)
+    raise ValueError(f"unknown arch: {arch} (choose 'regiondiff' or 'tempfuse')")

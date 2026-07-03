@@ -34,16 +34,16 @@ run () {                                    # run <name> <box-source> <train fla
 }
 
 # ---- Tier 0/1: the 3 spec directions + mode-B disease-head variants (cfg is saved in each ckpt) ----
+run m3_B_faithful  detector  --mode B --disease-head faithful   # non-neg + masked -> intervention PASS
 run m3_A           detector  --mode A
 run m3_B           detector  --mode B --disease-head mlp        # accuracy CBM (intervention FAILs)
-run m3_B_linear    detector  --mode B --disease-head linear     # learned dense linear (no sign)
+# run m3_B_linear    detector  --mode B --disease-head linear     # learned dense linear (no sign)
 run m3_B_nonneg    detector  --mode B --disease-head nonneg     # non-neg, no mask
-run m3_B_faithful  detector  --mode B --disease-head faithful   # non-neg + masked -> intervention PASS
-run m3_C           detector  --mode C                           # hybrid (run leakage test)
+# run m3_C           detector  --mode C                           # hybrid (run leakage test)
 
 # ---- Tier 2: trunk ablations, one toggle off from the faithful-B baseline ----
-run m3_Bf_nomask   detector  --mode B --disease-head faithful --no-mask-bbox
-run m3_Bf_neck128  detector  --mode B --disease-head faithful --neck-dim 128
+# run m3_Bf_nomask   detector  --mode B --disease-head faithful --no-mask-bbox
+# run m3_Bf_neck128  detector  --mode B --disease-head faithful --neck-dim 128
 run m3_Bf_aggmax   detector  --mode B --disease-head faithful --region-agg max
 run m3_Bf_noglobal detector  --mode B --disease-head faithful --no-global-head
 

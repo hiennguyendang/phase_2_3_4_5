@@ -19,6 +19,10 @@ DEFAULT_REGION_CACHE = Path("/kaggle/input/m3-region-cache") if ON_KAGGLE \
 # per-region present mask lives in the m3 label arrays (present_mask.npy + manifest.jsonl)
 DEFAULT_M3_LABELS_DIR = Path("/kaggle/input/m3-labels") if ON_KAGGLE \
     else (REPO_ROOT / "data" / "m3_labels")
+# frozen M1 BioViL-T patch grids ([1+196, C] per image) — the tempfuse arch reads these DIRECTLY
+# (no bridge/region-cache needed: M4 pools the patches itself). Boxes come from the m3 label arrays.
+DEFAULT_FEATURES_ROOT = Path("/kaggle/input/m1-features") if ON_KAGGLE \
+    else (REPO_ROOT / "data" / "features" / "frozen")
 # M4 progression targets (this module's labels.py output)
 DEFAULT_M4_LABELS_DIR = Path("/kaggle/input/m4-labels") if ON_KAGGLE \
     else (REPO_ROOT / "data" / "m4_labels")
@@ -33,6 +37,27 @@ DEFAULT_METADATA = REPO_ROOT / "data" / "mimic_metadata_final.jsonl"
 # ---- outputs -----------------------------------------------------------------
 WORK_ROOT = Path("/kaggle/working") if ON_KAGGLE else (REPO_ROOT / "phase_4" / "_work")
 DEFAULT_RUNS_DIR = WORK_ROOT / "m4_runs"
+
+# ---- architecture ------------------------------------------------------------
+# How M4 turns the two studies into per-region temporal features:
+#   regiondiff  consume the frozen-M3 REGION cache; head sees [c;p;c-p;lc;lp]        (v1 default)
+#   tempfuse    read the frozen M1 PATCH grids (196xC) for curr+prior, cross-attend current<-prior
+#               (BioViL-T-style soft registration), then M4's OWN bbox-guided attention pool ->
+#               region temporal feats -> head. Fixes "region-pool washes out localised change"
+#               and yields M4's own faithful "where progressed" (the pool alpha). Reads
+#               data/features/frozen directly; boxes from the m3 label arrays.
+ARCH = "regiondiff"
+
+# tempfuse geometry (must match how boxes were rasterised in phase_2/3: 448 frame, 14x14 grid)
+GRID_H = 14
+GRID_W = 14
+GRID_TOKENS = GRID_H * GRID_W    # 196
+INPUT_RES = 448                  # boxes live in this pixel space; cell = 448/14 = 32 px
+POOL_HEADS = 4                   # heads for the bbox-guided region attention pool
+MASK_BBOX = True                 # restrict each region query to its bbox cells (faithful "where")
+FUSE_BLOCKS = 1                  # cross-attn(current<-prior)+self+FFN blocks (keep shallow: overfits fast)
+FUSE_HEADS = 4
+BOX_SOURCE = "gt"                # "gt" (boxes.npy) | "detector" (boxes_det.npy) for the pool masks
 
 # ---- model -------------------------------------------------------------------
 NUM_CHEX = 14

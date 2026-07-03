@@ -23,13 +23,14 @@ from torch.utils.data import DataLoader
 
 import config
 import constants as C
-from dataset import M4Dataset, collate
+from dataset import collate, move_batch
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="M4 inference -> per-image progression JSON")
     p.add_argument("--ckpt", type=Path, required=True)
     p.add_argument("--region-cache", type=Path, default=config.DEFAULT_REGION_CACHE)
+    p.add_argument("--features-root", type=Path, default=config.DEFAULT_FEATURES_ROOT)
     p.add_argument("--m3-labels-dir", type=Path, default=config.DEFAULT_M3_LABELS_DIR)
     p.add_argument("--m4-labels-dir", type=Path, default=config.DEFAULT_M4_LABELS_DIR)
     p.add_argument("--pairs", type=Path, default=config.DEFAULT_PAIRS_PATH)
@@ -43,21 +44,20 @@ def parse_args() -> argparse.Namespace:
 
 @torch.no_grad()
 def main() -> int:
-    from eval import build_from_ckpt, dataset_kwargs
+    from eval import build_from_ckpt, dataset_from_ckpt
     args = parse_args()
     ck = torch.load(args.ckpt, map_location=args.device)
     m = build_from_ckpt(ck, args.device).eval()             # sets config.REQUIRE_PRIOR_PRESENT first
 
-    ds = M4Dataset(args.region_cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split,
-                   **dataset_kwargs(ck))
+    ds = dataset_from_ckpt(ck, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split,
+                           region_cache=args.region_cache, features_root=args.features_root)
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     written = 0
     with open(args.out, "w", encoding="utf-8") as f:
         for b in loader:
-            logits = m(b["feat_curr"].to(args.device), b["logit_curr"].to(args.device),
-                       b["feat_prior"].to(args.device), b["logit_prior"].to(args.device))  # [B,29,14,3]
+            logits = m(move_batch(b, args.device))                                    # [B,29,14,3]
             probs = F.softmax(logits, dim=-1).cpu()
             pred = probs.argmax(-1)
             mask = b["region_mask"]

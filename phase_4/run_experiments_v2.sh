@@ -42,34 +42,49 @@ run () {                                     # run <name> <extra train flags...>
   if [ -f "$ck" ]; then
     echo "  [skip train] $ck exists"
   else
-    python3 phase_4/scripts/2-train.py --region-cache "$CACHE" --m3-labels-dir "$M3LAB" \
-      --m4-labels-dir "$M4LAB" --pairs "$PAIRS" --out "$RUNS" \
+    # pass BOTH sources; the dataset picks region-cache (regiondiff) or features-root (tempfuse) by --arch
+    python3 phase_4/scripts/2-train.py --region-cache "$CACHE" --features-root "$FEAT" \
+      --m3-labels-dir "$M3LAB" --m4-labels-dir "$M4LAB" --pairs "$PAIRS" --out "$RUNS" \
       --epochs "$EP" --batch "$BATCH" --workers "$W" --device cuda \
       "$@" --name "$name" 2>&1 | tee "logs/$name.train.log"
   fi
-  # eval reads same_view / head_mode from the ckpt -> the test set + model match training
-  python3 phase_4/scripts/3-eval.py --ckpt "$ck" --region-cache "$CACHE" --m3-labels-dir "$M3LAB" \
-    --m4-labels-dir "$M4LAB" --pairs "$PAIRS" --split test --device cuda \
+  # eval reads arch / same_view / head_mode / box_source from the ckpt -> test set + model match training
+  python3 phase_4/scripts/3-eval.py --ckpt "$ck" --region-cache "$CACHE" --features-root "$FEAT" \
+    --m3-labels-dir "$M3LAB" --m4-labels-dir "$M4LAB" --pairs "$PAIRS" --split test --device cuda \
     2>&1 | tee "logs/$name.eval.log"
 }
 
 # ============================ v2 GRID ============================
+# --- regiondiff arch (v1 cache): the (a)(b)(c) selection/signal/structure improvements ---
 run m4v2_base       $COMMON                                   # (a) only  = change-select + early-stop
 run m4v2_sameview   $COMMON --same-view                       # (a)+(b)
 run m4v2_twostage   $COMMON --head-mode twostage              # (a)+(c)
-run m4v2_sv2stage   $COMMON --same-view --head-mode twostage  # (a)+(b)+(c)  ← the combined proposal
+run m4v2_sv2stage   $COMMON --same-view --head-mode twostage  # (a)+(b)+(c)
+
+# --- tempfuse arch (nấc 3): read M1 patch grids, cross-attn(curr<-prior) -> M4 bbox pool -> head ---
+# Reads data/features/frozen directly (NO bridge/region-cache). Head after the pool is the "mlp branch"
+# we ablate (mlp/kan/linear) alongside the same (a)(b)(c) options + fusion depth.
+TF="$COMMON --arch tempfuse"
+run m4v3_tf            $TF                                    # tempfuse baseline (mlp, flat, 1 block)
+run m4v3_tf_sameview   $TF --same-view                        # + (b) clean Siamese
+run m4v3_tf_twostage   $TF --head-mode twostage               # + (c) change x direction
+run m4v3_tf_sv2stage   $TF --same-view --head-mode twostage   # + (b)+(c)  ← full proposal
+# run m4v3_tf_kan        $TF --head-type kan                    # pool-head ablation: KAN
+# run m4v3_tf_linear     $TF --head-type linear                 # pool-head ablation: linear floor
+run m4v3_tf_2blocks    $TF --fuse-blocks 2                    # deeper fusion (watch for overfit)
+run m4v3_tf_detbox     $TF --box-source detector              # detector boxes instead of GT (deployable)
 
 # ============================ SUMMARY ============================
 echo ""; echo "================= SUMMARY (test) ================="
-printf "%-16s %s\n" "run" "macro-F1 / change-only F1  (+per-class)"
-for d in "$RUNS"/m4v2_*/ "$RUNS"/m4_mlp/; do
+printf "%-18s %s\n" "run" "macro-F1 / change-only F1  (+improved-F1)"
+for d in "$RUNS"/m4v2_*/ "$RUNS"/m4v3_*/ "$RUNS"/m4_mlp/; do
   [ -d "$d" ] || continue
   n=$(basename "$d")
   e=$(grep -h "change-only F1" "logs/$n.eval.log" 2>/dev/null | tail -1 | sed 's/^ *//')
   imp=$(grep -h "^  improved" "logs/$n.eval.log" 2>/dev/null | tail -1 | sed 's/^ *//')
-  printf "%-16s %s   [%s]\n" "$n" "${e:-—}" "${imp:-—}"
+  printf "%-18s %s   [%s]\n" "$n" "${e:-—}" "${imp:-—}"
 done
 echo ""
-echo "Reference = m4_mlp (v1: macro-select, all-views, flat). Watch improved-F1 for the twostage runs."
-echo "Ledger for M5:  python3 phase_4/scripts/4-infer.py --ckpt $RUNS/m4v2_sv2stage/best.pt \\"
-echo "  --region-cache $CACHE --m3-labels-dir $M3LAB --m4-labels-dir $M4LAB --pairs $PAIRS --split test --out m4_pred.jsonl"
+echo "Reference = m4_mlp (v1). regiondiff=m4v2_* (cache) | tempfuse=m4v3_* (patch cross-attn)."
+echo "Ledger for M5:  python3 phase_4/scripts/4-infer.py --ckpt $RUNS/m4v3_tf_sv2stage/best.pt \\"
+echo "  --features-root $FEAT --m3-labels-dir $M3LAB --m4-labels-dir $M4LAB --pairs $PAIRS --split test --out m4_pred.jsonl"

@@ -20,21 +20,20 @@ from torch.utils.data import DataLoader
 
 import config
 import constants as C
-from dataset import M4Dataset, RegionCache, collate
+from dataset import collate, make_dataset, move_batch
 from eval import evaluate
 from losses import class_weight_from_counts, progression_loss
 
 
-def _move(batch: dict, device) -> dict:
-    out = dict(batch)
-    for k in ("feat_curr", "logit_curr", "feat_prior", "logit_prior", "region_mask", "progression"):
-        out[k] = batch[k].to(device)
-    return out
-
-
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train M4 T-KAN")
+    p.add_argument("--arch", default=config.ARCH, choices=["regiondiff", "tempfuse"],
+                   help="regiondiff = frozen-M3 region cache; tempfuse = M1 patch grids + cross-attn + M4 pool")
     p.add_argument("--region-cache", type=Path, default=config.DEFAULT_REGION_CACHE)
+    p.add_argument("--features-root", type=Path, default=config.DEFAULT_FEATURES_ROOT,
+                   help="M1 patch grids (tempfuse only)")
+    p.add_argument("--box-source", default=config.BOX_SOURCE, choices=["gt", "detector"],
+                   help="bbox source for the tempfuse pool masks")
     p.add_argument("--m3-labels-dir", type=Path, default=config.DEFAULT_M3_LABELS_DIR)
     p.add_argument("--m4-labels-dir", type=Path, default=config.DEFAULT_M4_LABELS_DIR)
     p.add_argument("--pairs", type=Path, default=config.DEFAULT_PAIRS_PATH)
@@ -52,6 +51,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--focal-gamma", type=float, default=config.FOCAL_GAMMA)
     p.add_argument("--head-mode", default=config.HEAD_MODE, choices=["flat", "twostage"],
                    help="(c) flat 3-way softmax, or factorized change x direction")
+    p.add_argument("--fuse-blocks", type=int, default=config.FUSE_BLOCKS,
+                   help="tempfuse: #cross-attn blocks (keep shallow — overfits fast)")
     p.add_argument("--same-view", action="store_true",
                    help="(b) keep only same-ViewPosition prior pairs (eval inherits this from the ckpt)")
     p.add_argument("--select-metric", default=config.SELECT_METRIC, choices=["macro", "change"],
@@ -86,27 +87,29 @@ def main() -> int:
     import model as M
     args = parse_args()
     # config toggles read globally downstream (heads defaults, dataset masking) — set before use.
+    config.ARCH = args.arch
     config.HEAD_TYPE = args.head_type
     config.INPUT_MODE = args.input_mode
     config.HEAD_MODE = args.head_mode
+    config.FUSE_BLOCKS = args.fuse_blocks
     config.REQUIRE_PRIOR_PRESENT = not args.no_require_prior
     run_dir = args.out / args.name
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    cache = RegionCache(args.region_cache)
-    train_ds = M4Dataset(cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, "train",
-                         augment=config.AUGMENT_TIME_FLIP and not args.no_augment,
-                         same_view_only=args.same_view)
-    val_ds = M4Dataset(cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, "val",
-                       same_view_only=args.same_view)  # never augmented; same view filter as train
+    ds_kw = dict(region_cache=args.region_cache, features_root=args.features_root,
+                 same_view_only=args.same_view, box_source=args.box_source)
+    train_ds = make_dataset(args.arch, args.m3_labels_dir, args.m4_labels_dir, args.pairs, "train",
+                            augment=config.AUGMENT_TIME_FLIP and not args.no_augment, **ds_kw)
+    val_ds = make_dataset(args.arch, args.m3_labels_dir, args.m4_labels_dir, args.pairs, "val", **ds_kw)
     n_base = len(train_ds.rows)
-    print(f"train={len(train_ds):,} (base {n_base:,}, augment={train_ds.augment}, "
+    print(f"arch={args.arch} train={len(train_ds):,} (base {n_base:,}, augment={train_ds.augment}, "
           f"same_view={args.same_view}) val={len(val_ds):,} | skipped(train)={train_ds.skipped}")
     if len(train_ds) == 0:
-        raise SystemExit("[ERROR] no training pairs (cache/prior/labels missing?)")
+        raise SystemExit("[ERROR] no training pairs (cache/features/prior/labels missing?)")
     feat_dim = train_ds.feat_dim
-    print(f"feat_dim={feat_dim} | input={args.input_mode} | "
-          f"region_in_dim={M.region_in_dim(feat_dim, args.input_mode)} | head={args.head_type}/{args.head_mode} | "
+    extra = (f"region_in_dim={M.region_in_dim(feat_dim, args.input_mode)}" if args.arch == "regiondiff"
+             else f"fuse_blocks={config.FUSE_BLOCKS} box={args.box_source}")
+    print(f"feat_dim={feat_dim} | input={args.input_mode} | {extra} | head={args.head_type}/{args.head_mode} | "
           f"loss={args.loss} | require_prior={config.REQUIRE_PRIOR_PRESENT} | "
           f"select={args.select_metric} patience={args.patience}")
 
@@ -122,11 +125,12 @@ def main() -> int:
     vl = DataLoader(val_ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
 
     model = M.build_model(feat_dim, args.head_type, args.input_mode, args.hidden, args.dropout,
-                          args.head_mode).to(args.device)
+                          args.head_mode, args.arch, args.fuse_blocks).to(args.device)
     # model-rebuild cfg — persisted in every ckpt so eval.py/infer.py reconstruct the exact head + data gates.
-    mcfg = {"feat_dim": feat_dim, "head_type": args.head_type, "input_mode": args.input_mode,
-            "hidden": args.hidden, "dropout": args.dropout, "loss": args.loss,
-            "head_mode": args.head_mode, "same_view": args.same_view,
+    mcfg = {"feat_dim": feat_dim, "arch": args.arch, "head_type": args.head_type,
+            "input_mode": args.input_mode, "hidden": args.hidden, "dropout": args.dropout,
+            "loss": args.loss, "head_mode": args.head_mode, "same_view": args.same_view,
+            "box_source": args.box_source, "fuse_blocks": args.fuse_blocks,
             "require_prior_present": config.REQUIRE_PRIOR_PRESENT}
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=config.WEIGHT_DECAY)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
@@ -156,8 +160,8 @@ def main() -> int:
         model.train()
         run_loss, run_n = 0.0, 0
         for batch in tl:
-            b = _move(batch, args.device)
-            logits = model(b["feat_curr"], b["logit_curr"], b["feat_prior"], b["logit_prior"])
+            b = move_batch(batch, args.device)
+            logits = model(b)
             loss, nval = progression_loss(logits, b["progression"], b["region_mask"], weight,
                                           loss_type=args.loss, gamma=args.focal_gamma)
             opt.zero_grad(); loss.backward(); opt.step()
