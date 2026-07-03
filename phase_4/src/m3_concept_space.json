@@ -1,0 +1,821 @@
+{
+  "note": "69-concept M3 label space over ALL 243,310 scene graphs. Each concept is a per-region multi-label target (polarity yes/no; not-mentioned -> -100 for masked-BCE). No Finding is DERIVED (all negative), not a concept.",
+  "n_concepts": 69,
+  "category_counts": {
+    "anatomicalfinding": 43,
+    "disease": 10,
+    "tubesandlines": 12,
+    "device": 4
+  },
+  "chexpert14_index_order": [
+    "Atelectasis",
+    "Cardiomegaly",
+    "Consolidation",
+    "Edema",
+    "Enlarged Cardiomediastinum",
+    "Fracture",
+    "Lung Lesion",
+    "Lung Opacity",
+    "No Finding",
+    "Pleural Effusion",
+    "Pleural Other",
+    "Pneumonia",
+    "Pneumothorax",
+    "Support Devices"
+  ],
+  "concepts": [
+    {
+      "idx": 0,
+      "name": "lung opacity",
+      "category": "anatomicalfinding",
+      "total": 998139,
+      "pos_yes": 772719,
+      "neg_no": 225420,
+      "n_images": 211397,
+      "chexpert": "Lung Opacity"
+    },
+    {
+      "idx": 1,
+      "name": "pleural effusion",
+      "category": "anatomicalfinding",
+      "total": 767875,
+      "pos_yes": 282411,
+      "neg_no": 485464,
+      "n_images": 191834,
+      "chexpert": "Pleural Effusion"
+    },
+    {
+      "idx": 2,
+      "name": "pulmonary edema/hazy opacity",
+      "category": "anatomicalfinding",
+      "total": 392790,
+      "pos_yes": 174627,
+      "neg_no": 218163,
+      "n_images": 86639,
+      "chexpert": "Edema"
+    },
+    {
+      "idx": 3,
+      "name": "pneumothorax",
+      "category": "anatomicalfinding",
+      "total": 363113,
+      "pos_yes": 26023,
+      "neg_no": 337090,
+      "n_images": 158137,
+      "chexpert": "Pneumothorax"
+    },
+    {
+      "idx": 4,
+      "name": "atelectasis",
+      "category": "anatomicalfinding",
+      "total": 271906,
+      "pos_yes": 265711,
+      "neg_no": 6195,
+      "n_images": 83962,
+      "chexpert": "Atelectasis"
+    },
+    {
+      "idx": 5,
+      "name": "consolidation",
+      "category": "anatomicalfinding",
+      "total": 244679,
+      "pos_yes": 58986,
+      "neg_no": 185693,
+      "n_images": 78604,
+      "chexpert": "Consolidation"
+    },
+    {
+      "idx": 6,
+      "name": "mediastinal displacement",
+      "category": "anatomicalfinding",
+      "total": 227151,
+      "pos_yes": 6598,
+      "neg_no": 220553,
+      "n_images": 82698,
+      "chexpert": "Enlarged Cardiomediastinum"
+    },
+    {
+      "idx": 7,
+      "name": "vascular congestion",
+      "category": "anatomicalfinding",
+      "total": 173928,
+      "pos_yes": 113184,
+      "neg_no": 60744,
+      "n_images": 40501,
+      "chexpert": "Edema"
+    },
+    {
+      "idx": 8,
+      "name": "mediastinal widening",
+      "category": "anatomicalfinding",
+      "total": 170648,
+      "pos_yes": 11485,
+      "neg_no": 159163,
+      "n_images": 84130,
+      "chexpert": "Enlarged Cardiomediastinum"
+    },
+    {
+      "idx": 9,
+      "name": "superior mediastinal mass/enlargement",
+      "category": "anatomicalfinding",
+      "total": 162802,
+      "pos_yes": 6321,
+      "neg_no": 156481,
+      "n_images": 81300,
+      "chexpert": "Enlarged Cardiomediastinum"
+    },
+    {
+      "idx": 10,
+      "name": "enlarged cardiac silhouette",
+      "category": "anatomicalfinding",
+      "total": 162162,
+      "pos_yes": 60348,
+      "neg_no": 101814,
+      "n_images": 159328,
+      "chexpert": "Cardiomegaly"
+    },
+    {
+      "idx": 11,
+      "name": "enlarged hilum",
+      "category": "anatomicalfinding",
+      "total": 89794,
+      "pos_yes": 15971,
+      "neg_no": 73823,
+      "n_images": 45998,
+      "chexpert": "Enlarged Cardiomediastinum"
+    },
+    {
+      "idx": 12,
+      "name": "pleural/parenchymal scarring",
+      "category": "anatomicalfinding",
+      "total": 45129,
+      "pos_yes": 44057,
+      "neg_no": 1072,
+      "n_images": 15118,
+      "chexpert": "Pleural Other"
+    },
+    {
+      "idx": 13,
+      "name": "lung lesion",
+      "category": "anatomicalfinding",
+      "total": 43567,
+      "pos_yes": 37914,
+      "neg_no": 5653,
+      "n_images": 16218,
+      "chexpert": "Lung Lesion"
+    },
+    {
+      "idx": 14,
+      "name": "linear/patchy atelectasis",
+      "category": "anatomicalfinding",
+      "total": 39810,
+      "pos_yes": 39200,
+      "neg_no": 610,
+      "n_images": 13456,
+      "chexpert": "Atelectasis"
+    },
+    {
+      "idx": 15,
+      "name": "airspace opacity",
+      "category": "anatomicalfinding",
+      "total": 34138,
+      "pos_yes": 27374,
+      "neg_no": 6764,
+      "n_images": 11814,
+      "chexpert": "Lung Opacity"
+    },
+    {
+      "idx": 16,
+      "name": "tortuous aorta",
+      "category": "anatomicalfinding",
+      "total": 33736,
+      "pos_yes": 28905,
+      "neg_no": 4831,
+      "n_images": 15760,
+      "chexpert": "Enlarged Cardiomediastinum"
+    },
+    {
+      "idx": 17,
+      "name": "bone lesion",
+      "category": "anatomicalfinding",
+      "total": 31632,
+      "pos_yes": 3782,
+      "neg_no": 27850,
+      "n_images": 7558,
+      "chexpert": null
+    },
+    {
+      "idx": 18,
+      "name": "lobar/segmental collapse",
+      "category": "anatomicalfinding",
+      "total": 31299,
+      "pos_yes": 30115,
+      "neg_no": 1184,
+      "n_images": 10392,
+      "chexpert": "Atelectasis"
+    },
+    {
+      "idx": 19,
+      "name": "vascular calcification",
+      "category": "anatomicalfinding",
+      "total": 28414,
+      "pos_yes": 28290,
+      "neg_no": 124,
+      "n_images": 10626,
+      "chexpert": null
+    },
+    {
+      "idx": 20,
+      "name": "hyperaeration",
+      "category": "anatomicalfinding",
+      "total": 27721,
+      "pos_yes": 27119,
+      "neg_no": 602,
+      "n_images": 10889,
+      "chexpert": null
+    },
+    {
+      "idx": 21,
+      "name": "sub-diaphragmatic air",
+      "category": "anatomicalfinding",
+      "total": 27034,
+      "pos_yes": 3484,
+      "neg_no": 23550,
+      "n_images": 11243,
+      "chexpert": null
+    },
+    {
+      "idx": 22,
+      "name": "mass/nodule (not otherwise specified)",
+      "category": "anatomicalfinding",
+      "total": 23868,
+      "pos_yes": 21021,
+      "neg_no": 2847,
+      "n_images": 9175,
+      "chexpert": "Lung Lesion"
+    },
+    {
+      "idx": 23,
+      "name": "vascular redistribution",
+      "category": "anatomicalfinding",
+      "total": 16668,
+      "pos_yes": 16164,
+      "neg_no": 504,
+      "n_images": 3453,
+      "chexpert": "Edema"
+    },
+    {
+      "idx": 24,
+      "name": "infiltration",
+      "category": "anatomicalfinding",
+      "total": 16076,
+      "pos_yes": 9965,
+      "neg_no": 6111,
+      "n_images": 5279,
+      "chexpert": "Lung Opacity"
+    },
+    {
+      "idx": 25,
+      "name": "costophrenic angle blunting",
+      "category": "anatomicalfinding",
+      "total": 15907,
+      "pos_yes": 15905,
+      "neg_no": 2,
+      "n_images": 5965,
+      "chexpert": "Pleural Effusion"
+    },
+    {
+      "idx": 26,
+      "name": "rib fracture",
+      "category": "anatomicalfinding",
+      "total": 14769,
+      "pos_yes": 9478,
+      "neg_no": 5291,
+      "n_images": 9540,
+      "chexpert": "Fracture"
+    },
+    {
+      "idx": 27,
+      "name": "multiple masses/nodules",
+      "category": "anatomicalfinding",
+      "total": 13757,
+      "pos_yes": 10742,
+      "neg_no": 3015,
+      "n_images": 5237,
+      "chexpert": "Lung Lesion"
+    },
+    {
+      "idx": 28,
+      "name": "hernia",
+      "category": "anatomicalfinding",
+      "total": 9326,
+      "pos_yes": 9062,
+      "neg_no": 264,
+      "n_images": 3199,
+      "chexpert": null
+    },
+    {
+      "idx": 29,
+      "name": "calcified nodule",
+      "category": "anatomicalfinding",
+      "total": 7587,
+      "pos_yes": 7566,
+      "neg_no": 21,
+      "n_images": 2868,
+      "chexpert": "Lung Lesion"
+    },
+    {
+      "idx": 30,
+      "name": "elevated hemidiaphragm",
+      "category": "anatomicalfinding",
+      "total": 7350,
+      "pos_yes": 7336,
+      "neg_no": 14,
+      "n_images": 6747,
+      "chexpert": null
+    },
+    {
+      "idx": 31,
+      "name": "spinal degenerative changes",
+      "category": "anatomicalfinding",
+      "total": 7046,
+      "pos_yes": 7007,
+      "neg_no": 39,
+      "n_images": 7044,
+      "chexpert": null
+    },
+    {
+      "idx": 32,
+      "name": "pneumomediastinum",
+      "category": "anatomicalfinding",
+      "total": 6285,
+      "pos_yes": 2709,
+      "neg_no": 3576,
+      "n_images": 2030,
+      "chexpert": null
+    },
+    {
+      "idx": 33,
+      "name": "subcutaneous air",
+      "category": "anatomicalfinding",
+      "total": 5941,
+      "pos_yes": 5559,
+      "neg_no": 382,
+      "n_images": 3697,
+      "chexpert": null
+    },
+    {
+      "idx": 34,
+      "name": "shoulder osteoarthritis",
+      "category": "anatomicalfinding",
+      "total": 4799,
+      "pos_yes": 4799,
+      "neg_no": 0,
+      "n_images": 2272,
+      "chexpert": null
+    },
+    {
+      "idx": 35,
+      "name": "increased reticular markings/ild pattern",
+      "category": "anatomicalfinding",
+      "total": 4274,
+      "pos_yes": 4070,
+      "neg_no": 204,
+      "n_images": 1537,
+      "chexpert": "Lung Opacity"
+    },
+    {
+      "idx": 36,
+      "name": "hydropneumothorax",
+      "category": "anatomicalfinding",
+      "total": 3531,
+      "pos_yes": 3334,
+      "neg_no": 197,
+      "n_images": 1039,
+      "chexpert": "Pneumothorax"
+    },
+    {
+      "idx": 37,
+      "name": "spinal fracture",
+      "category": "anatomicalfinding",
+      "total": 3466,
+      "pos_yes": 3207,
+      "neg_no": 259,
+      "n_images": 3443,
+      "chexpert": "Fracture"
+    },
+    {
+      "idx": 38,
+      "name": "scoliosis",
+      "category": "anatomicalfinding",
+      "total": 3315,
+      "pos_yes": 3287,
+      "neg_no": 28,
+      "n_images": 3312,
+      "chexpert": null
+    },
+    {
+      "idx": 39,
+      "name": "bronchiectasis",
+      "category": "anatomicalfinding",
+      "total": 3270,
+      "pos_yes": 3224,
+      "neg_no": 46,
+      "n_images": 959,
+      "chexpert": null
+    },
+    {
+      "idx": 40,
+      "name": "cyst/bullae",
+      "category": "anatomicalfinding",
+      "total": 2478,
+      "pos_yes": 2413,
+      "neg_no": 65,
+      "n_images": 942,
+      "chexpert": "Lung Lesion"
+    },
+    {
+      "idx": 41,
+      "name": "clavicle fracture",
+      "category": "anatomicalfinding",
+      "total": 1010,
+      "pos_yes": 984,
+      "neg_no": 26,
+      "n_images": 903,
+      "chexpert": "Fracture"
+    },
+    {
+      "idx": 42,
+      "name": "diaphragmatic eventration (benign)",
+      "category": "anatomicalfinding",
+      "total": 88,
+      "pos_yes": 84,
+      "neg_no": 4,
+      "n_images": 67,
+      "chexpert": null
+    },
+    {
+      "idx": 43,
+      "name": "pneumonia",
+      "category": "disease",
+      "total": 188194,
+      "pos_yes": 105935,
+      "neg_no": 82259,
+      "n_images": 68390,
+      "chexpert": "Pneumonia"
+    },
+    {
+      "idx": 44,
+      "name": "fluid overload/heart failure",
+      "category": "disease",
+      "total": 40641,
+      "pos_yes": 26337,
+      "neg_no": 14304,
+      "n_images": 10761,
+      "chexpert": null
+    },
+    {
+      "idx": 45,
+      "name": "aspiration",
+      "category": "disease",
+      "total": 36176,
+      "pos_yes": 33399,
+      "neg_no": 2777,
+      "n_images": 9969,
+      "chexpert": null
+    },
+    {
+      "idx": 46,
+      "name": "copd/emphysema",
+      "category": "disease",
+      "total": 21113,
+      "pos_yes": 20441,
+      "neg_no": 672,
+      "n_images": 7099,
+      "chexpert": null
+    },
+    {
+      "idx": 47,
+      "name": "granulomatous disease",
+      "category": "disease",
+      "total": 7850,
+      "pos_yes": 6716,
+      "neg_no": 1134,
+      "n_images": 3097,
+      "chexpert": null
+    },
+    {
+      "idx": 48,
+      "name": "interstitial lung disease",
+      "category": "disease",
+      "total": 6372,
+      "pos_yes": 5994,
+      "neg_no": 378,
+      "n_images": 2210,
+      "chexpert": null
+    },
+    {
+      "idx": 49,
+      "name": "lung cancer",
+      "category": "disease",
+      "total": 5206,
+      "pos_yes": 5185,
+      "neg_no": 21,
+      "n_images": 1864,
+      "chexpert": null
+    },
+    {
+      "idx": 50,
+      "name": "alveolar hemorrhage",
+      "category": "disease",
+      "total": 4995,
+      "pos_yes": 4568,
+      "neg_no": 427,
+      "n_images": 2062,
+      "chexpert": null
+    },
+    {
+      "idx": 51,
+      "name": "goiter",
+      "category": "disease",
+      "total": 1953,
+      "pos_yes": 1926,
+      "neg_no": 27,
+      "n_images": 651,
+      "chexpert": null
+    },
+    {
+      "idx": 52,
+      "name": "pericardial effusion",
+      "category": "disease",
+      "total": 1637,
+      "pos_yes": 1446,
+      "neg_no": 191,
+      "n_images": 1602,
+      "chexpert": null
+    },
+    {
+      "idx": 53,
+      "name": "enteric tube",
+      "category": "tubesandlines",
+      "total": 109676,
+      "pos_yes": 99052,
+      "neg_no": 10624,
+      "n_images": 32306,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 54,
+      "name": "endotracheal tube",
+      "category": "tubesandlines",
+      "total": 70307,
+      "pos_yes": 66058,
+      "neg_no": 4249,
+      "n_images": 25507,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 55,
+      "name": "picc",
+      "category": "tubesandlines",
+      "total": 52149,
+      "pos_yes": 48505,
+      "neg_no": 3644,
+      "n_images": 16287,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 56,
+      "name": "ij line",
+      "category": "tubesandlines",
+      "total": 40854,
+      "pos_yes": 37614,
+      "neg_no": 3240,
+      "n_images": 14265,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 57,
+      "name": "chest port",
+      "category": "tubesandlines",
+      "total": 25759,
+      "pos_yes": 25287,
+      "neg_no": 472,
+      "n_images": 7664,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 58,
+      "name": "chest tube",
+      "category": "tubesandlines",
+      "total": 22328,
+      "pos_yes": 17308,
+      "neg_no": 5020,
+      "n_images": 13512,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 59,
+      "name": "swan-ganz catheter",
+      "category": "tubesandlines",
+      "total": 12885,
+      "pos_yes": 10255,
+      "neg_no": 2630,
+      "n_images": 2893,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 60,
+      "name": "subclavian line",
+      "category": "tubesandlines",
+      "total": 12392,
+      "pos_yes": 11781,
+      "neg_no": 611,
+      "n_images": 4315,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 61,
+      "name": "tracheostomy tube",
+      "category": "tubesandlines",
+      "total": 11244,
+      "pos_yes": 10795,
+      "neg_no": 449,
+      "n_images": 5048,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 62,
+      "name": "pigtail catheter",
+      "category": "tubesandlines",
+      "total": 7245,
+      "pos_yes": 6199,
+      "neg_no": 1046,
+      "n_images": 4292,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 63,
+      "name": "intra-aortic balloon pump",
+      "category": "tubesandlines",
+      "total": 2191,
+      "pos_yes": 1814,
+      "neg_no": 377,
+      "n_images": 719,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 64,
+      "name": "mediastinal drain",
+      "category": "tubesandlines",
+      "total": 969,
+      "pos_yes": 587,
+      "neg_no": 382,
+      "n_images": 770,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 65,
+      "name": "cardiac pacer and wires",
+      "category": "device",
+      "total": 37357,
+      "pos_yes": 36817,
+      "neg_no": 540,
+      "n_images": 13219,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 66,
+      "name": "cabg grafts",
+      "category": "device",
+      "total": 4790,
+      "pos_yes": 4774,
+      "neg_no": 16,
+      "n_images": 4031,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 67,
+      "name": "prosthetic valve",
+      "category": "device",
+      "total": 3110,
+      "pos_yes": 3097,
+      "neg_no": 13,
+      "n_images": 3108,
+      "chexpert": "Support Devices"
+    },
+    {
+      "idx": 68,
+      "name": "aortic graft/repair",
+      "category": "device",
+      "total": 354,
+      "pos_yes": 354,
+      "neg_no": 0,
+      "n_images": 118,
+      "chexpert": "Support Devices"
+    }
+  ],
+  "chexpert14_from_concepts": {
+    "Atelectasis": [
+      "atelectasis",
+      "linear/patchy atelectasis",
+      "lobar/segmental collapse"
+    ],
+    "Cardiomegaly": [
+      "enlarged cardiac silhouette"
+    ],
+    "Consolidation": [
+      "consolidation"
+    ],
+    "Edema": [
+      "pulmonary edema/hazy opacity",
+      "vascular congestion",
+      "vascular redistribution"
+    ],
+    "Enlarged Cardiomediastinum": [
+      "mediastinal displacement",
+      "mediastinal widening",
+      "superior mediastinal mass/enlargement",
+      "enlarged hilum",
+      "tortuous aorta"
+    ],
+    "Fracture": [
+      "rib fracture",
+      "spinal fracture",
+      "clavicle fracture"
+    ],
+    "Lung Lesion": [
+      "lung lesion",
+      "mass/nodule (not otherwise specified)",
+      "multiple masses/nodules",
+      "calcified nodule",
+      "cyst/bullae"
+    ],
+    "Lung Opacity": [
+      "lung opacity",
+      "airspace opacity",
+      "infiltration",
+      "increased reticular markings/ild pattern"
+    ],
+    "No Finding": [],
+    "Pleural Effusion": [
+      "pleural effusion",
+      "costophrenic angle blunting"
+    ],
+    "Pleural Other": [
+      "pleural/parenchymal scarring"
+    ],
+    "Pneumonia": [
+      "pneumonia"
+    ],
+    "Pneumothorax": [
+      "pneumothorax",
+      "hydropneumothorax"
+    ],
+    "Support Devices": [
+      "enteric tube",
+      "endotracheal tube",
+      "picc",
+      "ij line",
+      "chest port",
+      "chest tube",
+      "swan-ganz catheter",
+      "subclavian line",
+      "tracheostomy tube",
+      "pigtail catheter",
+      "intra-aortic balloon pump",
+      "mediastinal drain",
+      "cardiac pacer and wires",
+      "cabg grafts",
+      "prosthetic valve",
+      "aortic graft/repair"
+    ]
+  },
+  "chexpert_derived": {
+    "No Finding": "all 14 negative (or nlp|yes|normal)"
+  },
+  "concepts_with_no_chexpert_slot": [
+    "bone lesion",
+    "vascular calcification",
+    "hyperaeration",
+    "sub-diaphragmatic air",
+    "hernia",
+    "elevated hemidiaphragm",
+    "spinal degenerative changes",
+    "pneumomediastinum",
+    "subcutaneous air",
+    "shoulder osteoarthritis",
+    "scoliosis",
+    "bronchiectasis",
+    "diaphragmatic eventration (benign)",
+    "fluid overload/heart failure",
+    "aspiration",
+    "copd/emphysema",
+    "granulomatous disease",
+    "interstitial lung disease",
+    "lung cancer",
+    "alveolar hemorrhage",
+    "goiter",
+    "pericardial effusion"
+  ]
+}

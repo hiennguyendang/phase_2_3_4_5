@@ -21,36 +21,51 @@ Train M4 on the **mode-A** (shipping, where-faithful) M3 logits. The contract is
 (A/B/C all emit 14 soft logits, same shape), so B/C can be fed into the *same* M4 as an ablation —
 no separate M4 per direction. Pass **soft logits**, not hard labels (magnitude signals the change).
 
-## Files
+## Layout (same split as phase_2 / phase_3: `src/` library + numbered `scripts/`)
+```
+phase_4/
+  src/        config.py constants.py dataset.py heads.py losses.py model.py eval.py  (+ bundled JSONs)
+  scripts/    1-labels.py  2-train.py  3-eval.py  4-infer.py     (numbered = run order)
+  run_experiments.sh   notebooks/phase4_kaggle.ipynb   README.md
+```
+Numbered `scripts/` are the executable entry points; each prepends `src/` to `sys.path` then imports
+the library modules. `src/eval.py` is a library (imported by `2-train.py` + `4-infer.py`) **and** an
+entry point, so `3-eval.py` is a thin wrapper (same trick as phase_3's `5-eval.py`).
+
 | File | Role | Needs GPU |
 |------|------|-----------|
-| `constants.py` | 29 regions + 14 CheXpert + concept→disease map + 3 progression classes | — |
-| `config.py` | paths + hyperparams | — |
+| `src/constants.py` | 29 regions + 14 CheXpert + concept→disease map + 3 progression classes | — |
+| `src/config.py` | paths + hyperparams + ablation knobs (`INPUT_MODE`, `LOSS_TYPE`, `HEAD_TYPE`) | — |
 | **Prep (local, no GPU):** | | |
-| `labels.py` | scene-graph `comparison_cues` → `progression.npy [N,29,14]` (0/1/2/-100) + manifest | no |
-| **Bridge (GPU, once):** | | |
-| `../phase_3/precompute_regions.py` | freeze M3 → cache region features + logits for every image | yes |
+| `scripts/1-labels.py` | scene-graph `comparison_cues` → `progression.npy [N,29,14]` (0/1/2/-100) + manifest | no |
+| **Bridge (GPU, once) — lives in phase_3 (it freezes M3):** | | |
+| `../phase_3/scripts/8-precompute_regions.py` | freeze M3 → cache region features + logits for every image | yes |
 | **Model:** | | |
-| `dataset.py` | pair curr↔prior, serve cached tensors + progression target | — |
-| `heads.py` / `model.py` | MLP T-head (KAN ablation) → `29×14×3` | — |
-| `losses.py` | masked, class-weighted CE (3 classes; "stable" dominates) | — |
-| `train.py` / `eval.py` / `infer.py` | train (Drive-resumable) / **macro-F1** + change-only F1 / change-ledger JSON for M5 | yes |
+| `src/dataset.py` | pair curr↔prior, serve cached tensors + progression target | — |
+| `src/heads.py` / `src/model.py` | T-head (`mlp` / `kan` / `linear`) + input-mode composition → `29×14×3` | — |
+| `src/losses.py` | masked, class-weighted CE / focal (3 classes; "stable" dominates) | — |
+| `scripts/2-train.py` / `src/eval.py` / `scripts/4-infer.py` | train (Drive-resumable) / **macro-F1** + change-only F1 / change-ledger JSON for M5 | yes |
 
 ## Run order
 ```bash
-# 0) prep (local, no GPU) — progression targets; pairs come from phase_3/pairing.py
-python phase_4/labels.py --scene-root <chest-imagenome> --out-dir data/m4_labels
+# 1) prep (local, no GPU) — progression targets; pairs come from phase_3/scripts/2-pairing.py
+python phase_4/scripts/1-labels.py --scene-root <chest-imagenome> --out-dir data/m4_labels
 
-# 1) bridge (GPU, once) — needs the trained M3 ckpt + the BioViL-T feature cache
-python phase_3/precompute_regions.py --ckpt <run>/m3_A/best.pt \
+# 2) bridge (GPU, once) — phase_3 script; needs the trained M3 ckpt + the BioViL-T feature cache
+python phase_3/scripts/8-precompute_regions.py --ckpt data/m3_B_faithful/best.pt \
     --labels-dir data/m3_labels --features-root <feat> --out-dir data/m3_region_cache
 
-# 2) train + eval + infer
-python phase_4/train.py --region-cache data/m3_region_cache --m3-labels-dir data/m3_labels \
-    --m4-labels-dir data/m4_labels --pairs data/m3_pairs.jsonl --device cuda
-python phase_4/eval.py  --ckpt <run>/m4/best.pt --split test
-python phase_4/infer.py --ckpt <run>/m4/best.pt --split test --out m4_pred.jsonl
+# 3) train + eval + infer (or just: bash phase_4/run_experiments.sh for the full ablation grid)
+python phase_4/scripts/2-train.py --region-cache data/m3_region_cache --m3-labels-dir data/m3_labels \
+    --m4-labels-dir data/m4_labels --pairs data/m4_labels/m3_pairs.jsonl --device cuda --name m4_mlp
+python phase_4/scripts/3-eval.py  --ckpt data/run/m4_mlp/best.pt --split test
+python phase_4/scripts/4-infer.py --ckpt data/run/m4_mlp/best.pt --split test --out m4_pred.jsonl
 ```
+
+## Ablation grid (`run_experiments.sh`)
+Bridge runs **once**; all runs share the same B-faithful region cache. Axes: **head** (`mlp`/`kan`/`linear`),
+**input signal** (`full`/`concat`/`diff`/`logits`/`feat`), **imbalance** (class-weight, focal, time-flip),
+**supervision** (`--no-require-prior`). Read **change-only F1** as the headline; accuracy≈"stable" is a red flag.
 
 ## Notes
 - ⚠️ **EVAL labels are a TRAIN-ONLY source (OPEN decision B2 — biggest risk; see

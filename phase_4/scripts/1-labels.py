@@ -12,8 +12,8 @@ Output  data/m4_labels/ :
 Per-region present masks and the prior link are NOT stored here — M4's dataset reads present masks
 from the m3 label arrays and the prior from m3_pairs.jsonl.
 
-    python phase_4/labels.py --scene-root <dir> --metadata data/mimic_metadata_final.jsonl \
-                             --out-dir data/m4_labels
+    python phase_4/scripts/1-labels.py --scene-root <dir> --metadata data/mimic_metadata_final.jsonl \
+                                       --out-dir data/m4_labels
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ import json
 import os
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))  # phase_4/src
 
 import numpy as np
 

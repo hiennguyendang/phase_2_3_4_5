@@ -29,19 +29,40 @@ restricts each disease to *its own* concepts and the weights are ≥0 — so rai
 only raise its disease ⇒ **the concept-intervention test passes by construction**. Options:
 `mlp` (accuracy, entangled) · `linear` (dense, no sign) · `nonneg` (≥0, no mask) · `faithful` (≥0 + masked).
 
-## Results (silver MIMIC, preliminary — test AUC, val faithfulness)
-| run | disease head | image F1 | image AUC | region AUC | concept F1 | faithfulness verdict |
-|-----|--------------|---------:|----------:|-----------:|-----------:|----------------------|
-| **A** direct | — | 0.813 | 0.656 | 0.716 | — | where-faithful (N/A) |
-| **B** mlp | free MLP | 0.810 | 0.667 | 0.722 | 0.827 | intervention **64% → FAIL** (fake bottleneck) |
-| **B faithful** | masked non-neg | 0.794 | 0.648 | 0.719 | 0.806 | go/no-go PASS **+ intervention 100% → PASS** ✅ |
-| **C** hybrid | MLP(feat⊕concept) | ~0.81 | ~0.679 (val) | 0.722 | 0.828 | **leakage** (drop 0.015<0.02) → FAIL |
+## Results (silver MIMIC — test AUC; read **AUC**, F1≈0.88 is inflated by prevalence + pos_weight)
+| run | disease head | image AUC | region AUC | concept F1 | faithfulness verdict |
+|-----|--------------|----------:|-----------:|-----------:|----------------------|
+| **A** direct | — | 0.828 | 0.864 | — | where-faithful (N/A) |
+| **B** mlp | free MLP | 0.829 | 0.862 | 0.896 | intervention 87%, δ+0.027 → PASS but **seed-dependent** |
+| **B faithful** | masked non-neg | 0.828 | 0.866 | 0.890 | intervention **100%, δ+0.070 → PASS by construction** ✅ |
+| B linear | dense signed | 0.827 | 0.856 | 0.895 | 91%, δ+0.014 (weak) |
+| B nonneg | ≥0, no mask | 0.823 | 0.812 | **0.618** | 100% but **concepts collapse** ❌ |
+| **C** hybrid | MLP(feat⊕concept) | 0.830 | 0.864 | 0.903 | leakage drop **0.021** (borderline) + more complex ❌ |
 
-**Takeaway:** accuracy is ~flat across A/B/C (ceiling set by the frozen features, not the head).
-Only **B-faithful earns the "why" claim** — for ~0.02 AUC below B-mlp it turns a fake bottleneck into a
-real one (intervention 64%→100%). B-mlp's concepts are decorative; C leaks. → **VERA ships B-faithful**
-for the concept "why", with A (where-faithful) as the unconditional fallback. (Numbers are on silver
-labels; F1 is inflated by prevalence + pos_weight at threshold 0.5 — read **AUC** as the honest metric.)
+Trunk ablations (all on B-faithful): **−global-head 0.805 (−0.024)** · neck128 0.828 (~0) · nomask 0.830 (~0) ·
+aggmax 0.826 (~0) · gtbox-oracle 0.832 (+0.004).
+
+**Takeaway:** accuracy is ~flat (~0.828 AUC) no matter what you toggle → the ceiling is the **frozen
+features**, not the head. Only **two things move the needle**: (1) the **global head** (−0.024 if removed);
+(2) the **faithful head** gives the strongest, *seed-independent* faithfulness at **zero** accuracy cost and
+**fewer params** than the MLP. B-mlp now passes (87%) but that's one seed; faithful is 100% by construction.
+→ **VERA ships B-faithful** for the "why", **A** as the where-faithful fallback.
+
+### Shipping config (lean — reviewers dislike unnecessary complexity)
+```
+HEAD_MODE="B"  DISEASE_HEAD="faithful"  USE_GLOBAL_HEAD=True
+MASK_BBOX=True  NECK_DIM=None  REGION_AGG="attention"  HEAD_TYPE="mlp"
+```
+Keep: global head (earns accuracy), faithful head (faithfulness + fewer params), mask (the "where" signal,
+costs 0 accuracy). Drop from the shipped model: neck, **KAN**, mode C / nonneg / linear.
+**Do NOT delete the ablation flags** — the table above *is* the proof we didn't add unnecessary complexity;
+the flags stay off-by-default so the paper's ablation is reproducible.
+
+**KAN head** (`--head-type kan`, FastKAN Gaussian-RBF — implemented, NOT shipped): reaches the **same val
+ceiling** as the MLP (~0.828 AUC / 0.876 F1) then **overfits faster**, for **×3.8 the params** (full model
+1.64M→6.18M; concept head ×9: 0.30M→2.68M). No ceiling gain → not shipped. *(The `m3_Bfaithful_kan` reload
+eval collapsed to test AUC 0.486 — treated as a checkpoint anomaly, not KAN's real score; the drop-KAN call
+rests on the val ceiling + param count, not that number.)*
 
 ## Layout (mirrors phase_2)
 ```

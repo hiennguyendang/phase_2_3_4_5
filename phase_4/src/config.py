@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 ON_KAGGLE = Path("/kaggle/input").exists()
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]   # src/ -> phase_4/ -> repo root
 
 # ---- inputs ------------------------------------------------------------------
 # frozen-M3 region cache: <image_id>.npy float16 [29, feat_dim + 14] (feat ‖ disease logits)

@@ -11,12 +11,12 @@ import json
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
-REPO_ROOT = _HERE.parent
+REPO_ROOT = _HERE.parents[1]   # src/ -> phase_4/ -> repo root
 
 
 def _find(name: str) -> Path:
-    for cand in (REPO_ROOT / "data" / name, _HERE / name, _HERE.parent / "phase_3" / name,
-                 Path("data") / name, Path(name)):
+    # bundled copy in src/ (self-contained on Kaggle) -> repo data/ -> cwd fallbacks
+    for cand in (_HERE / name, REPO_ROOT / "data" / name, Path("data") / name, Path(name)):
         if cand.exists():
             return cand
     return REPO_ROOT / "data" / name

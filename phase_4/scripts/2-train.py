@@ -1,12 +1,16 @@
 """Train M4 (T-KAN) on cached frozen-M3 region tensors.
 
-    python phase_4/train.py --region-cache data/m3_region_cache --m3-labels-dir data/m3_labels \
-        --m4-labels-dir data/m4_labels --pairs data/m3_pairs.jsonl --device cuda
+    python phase_4/scripts/2-train.py --region-cache data/m3_region_cache --m3-labels-dir data/m3_labels \
+        --m4-labels-dir data/m4_labels --pairs data/m4_labels/m3_pairs.jsonl --device cuda
 
 Drive-resumable (same pattern as phase_3): --resume + --sync-remote.
 """
 
 from __future__ import annotations
+
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "src"))  # phase_4/src
 
 import argparse
 from pathlib import Path

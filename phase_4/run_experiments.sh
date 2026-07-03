@@ -43,12 +43,12 @@ run () {                                    # run <name> <train flags...>
   if [ -f "$ck" ]; then
     echo "  [skip train] $ck exists"
   else
-    python3 phase_4/train.py --region-cache "$CACHE" --m3-labels-dir "$M3LAB" \
+    python3 phase_4/scripts/2-train.py --region-cache "$CACHE" --m3-labels-dir "$M3LAB" \
       --m4-labels-dir "$M4LAB" --pairs "$PAIRS" --out "$RUNS" \
       --epochs "$EP" --batch "$BATCH" --workers "$W" --device cuda \
       "$@" --name "$name" 2>&1 | tee "logs/$name.train.log"
   fi
-  python3 phase_4/eval.py --ckpt "$ck" --region-cache "$CACHE" --m3-labels-dir "$M3LAB" \
+  python3 phase_4/scripts/3-eval.py --ckpt "$ck" --region-cache "$CACHE" --m3-labels-dir "$M3LAB" \
     --m4-labels-dir "$M4LAB" --pairs "$PAIRS" --split test --device cuda \
     2>&1 | tee "logs/$name.eval.log"
 }
@@ -93,5 +93,5 @@ for d in "$RUNS"/m4_*/; do
 done
 echo ""
 echo "Change-ledger for M5 (best run): "
-echo "  python3 phase_4/infer.py --ckpt $RUNS/m4_kan/best.pt --region-cache $CACHE \\"
+echo "  python3 phase_4/scripts/4-infer.py --ckpt $RUNS/m4_kan/best.pt --region-cache $CACHE \\"
 echo "    --m3-labels-dir $M3LAB --m4-labels-dir $M4LAB --pairs $PAIRS --split test --out m4_pred.jsonl"
