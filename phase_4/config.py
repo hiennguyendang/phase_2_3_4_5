@@ -38,9 +38,23 @@ DEFAULT_RUNS_DIR = WORK_ROOT / "m4_runs"
 NUM_CHEX = 14
 # T-head input/region = [feat_curr ; feat_prior ; feat_curr-feat_prior] + [logit_curr ; logit_prior]
 #                     = 3*feat_dim + 2*14   (feat_dim auto-detected from the cache; 512 -> 1564)
-HEAD_TYPE = "mlp"               # "mlp" now; "kan" (FastKAN) later — same interface
+HEAD_TYPE = "mlp"               # "mlp" (baseline) | "kan" (FastKAN) | "linear" — same make_head interface
 HEAD_HIDDEN = 512
 HEAD_DROPOUT = 0.1
+KAN_GRIDS = 8                   # FastKAN: #RBF centers per input dim (ablation head only)
+
+# ---- input composition (spec 4.2) --------------------------------------------
+# What the per-region head sees. Ablation axis: where does the progression signal live?
+#   full   [feat_curr ; feat_prior ; feat_curr-feat_prior ; logit_curr ; logit_prior]  (baseline)
+#   concat [feat_curr ; feat_prior ; logit_curr ; logit_prior]        (no explicit difference)
+#   diff   [feat_curr-feat_prior ; logit_curr-logit_prior]            (pure Siamese difference)
+#   logits [logit_curr ; logit_prior]                                 (M3 disease logits ONLY)
+#   feat   [feat_curr ; feat_prior ; feat_curr-feat_prior]            (region features ONLY, no logits)
+INPUT_MODE = "full"
+
+# ---- loss --------------------------------------------------------------------
+LOSS_TYPE = "ce"                # "ce" (baseline) | "focal" — both honor USE_CLASS_WEIGHT
+FOCAL_GAMMA = 2.0
 
 REQUIRE_PRIOR_PRESENT = True    # a region is supervised only if present in BOTH curr and prior
 

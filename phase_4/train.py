@@ -39,7 +39,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--epochs", type=int, default=config.EPOCHS)
     p.add_argument("--batch", type=int, default=config.BATCH)
     p.add_argument("--lr", type=float, default=config.LR)
-    p.add_argument("--head-type", default=config.HEAD_TYPE)
+    p.add_argument("--head-type", default=config.HEAD_TYPE, choices=["mlp", "linear", "kan"])
+    p.add_argument("--input-mode", default=config.INPUT_MODE,
+                   choices=["full", "concat", "diff", "logits", "feat"])
+    p.add_argument("--hidden", type=int, default=config.HEAD_HIDDEN)
+    p.add_argument("--dropout", type=float, default=config.HEAD_DROPOUT)
+    p.add_argument("--loss", default=config.LOSS_TYPE, choices=["ce", "focal"])
+    p.add_argument("--focal-gamma", type=float, default=config.FOCAL_GAMMA)
+    p.add_argument("--no-class-weight", action="store_true", help="disable inverse-freq class weighting")
+    p.add_argument("--no-require-prior", action="store_true",
+                   help="supervise cells present in CURRENT only (default: require prior present too)")
     p.add_argument("--no-augment", action="store_true", help="disable train-time time-flip augmentation")
     p.add_argument("--workers", type=int, default=2)
     p.add_argument("--device", default="cuda")
@@ -64,7 +73,10 @@ def _rclone(*a) -> None:
 def main() -> int:
     import model as M
     args = parse_args()
+    # config toggles read globally downstream (heads defaults, dataset masking) — set before use.
     config.HEAD_TYPE = args.head_type
+    config.INPUT_MODE = args.input_mode
+    config.REQUIRE_PRIOR_PRESENT = not args.no_require_prior
     run_dir = args.out / args.name
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -78,10 +90,12 @@ def main() -> int:
     if len(train_ds) == 0:
         raise SystemExit("[ERROR] no training pairs (cache/prior/labels missing?)")
     feat_dim = train_ds.feat_dim
-    print(f"feat_dim={feat_dim} | region_in_dim={M.region_in_dim(feat_dim)} | head={args.head_type}")
+    print(f"feat_dim={feat_dim} | input={args.input_mode} | "
+          f"region_in_dim={M.region_in_dim(feat_dim, args.input_mode)} | head={args.head_type} | "
+          f"loss={args.loss} | require_prior={config.REQUIRE_PRIOR_PRESENT}")
 
     weight = None
-    if config.USE_CLASS_WEIGHT:
+    if config.USE_CLASS_WEIGHT and not args.no_class_weight:
         counts = train_ds.class_counts()             # reflects flips when augmenting
         weight = class_weight_from_counts(counts).to(args.device)
         print("[class_weight]", {n: f"{int(c)}->{float(w):.2f}"
@@ -91,7 +105,11 @@ def main() -> int:
                     num_workers=args.workers, collate_fn=collate, drop_last=True)
     vl = DataLoader(val_ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
 
-    model = M.build_model(feat_dim).to(args.device)
+    model = M.build_model(feat_dim, args.head_type, args.input_mode, args.hidden, args.dropout).to(args.device)
+    # model-rebuild cfg — persisted in every ckpt so eval.py/infer.py reconstruct the exact head.
+    mcfg = {"feat_dim": feat_dim, "head_type": args.head_type, "input_mode": args.input_mode,
+            "hidden": args.hidden, "dropout": args.dropout, "loss": args.loss,
+            "require_prior_present": config.REQUIRE_PRIOR_PRESENT}
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=config.WEIGHT_DECAY)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
@@ -122,14 +140,15 @@ def main() -> int:
         for batch in tl:
             b = _move(batch, args.device)
             logits = model(b["feat_curr"], b["logit_curr"], b["feat_prior"], b["logit_prior"])
-            loss, nval = progression_loss(logits, b["progression"], b["region_mask"], weight)
+            loss, nval = progression_loss(logits, b["progression"], b["region_mask"], weight,
+                                          loss_type=args.loss, gamma=args.focal_gamma)
             opt.zero_grad(); loss.backward(); opt.step()
             run_loss += float(loss) * max(nval, 1); run_n += max(nval, 1)
             step += 1
             if args.sync_every and step % args.sync_every == 0:
                 torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
-                            "sched": sched.state_dict(), "feat_dim": feat_dim,
-                            "head_type": args.head_type, "epoch": epoch, "best": best}, run_dir / "last.pt")
+                            "sched": sched.state_dict(), "epoch": epoch, "best": best, **mcfg},
+                           run_dir / "last.pt")
                 push()
         sched.step()
         res = evaluate(model, vl, args.device)
@@ -142,8 +161,7 @@ def main() -> int:
         if is_best:
             best = f1
         ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
-                "feat_dim": feat_dim, "head_type": args.head_type, "epoch": epoch,
-                "val_f1": f1, "best": best}
+                "epoch": epoch, "val_f1": f1, "best": best, **mcfg}
         torch.save(ckpt, run_dir / "last.pt")
         if is_best:
             torch.save(ckpt, run_dir / "best.pt")

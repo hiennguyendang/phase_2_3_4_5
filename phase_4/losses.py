@@ -29,9 +29,13 @@ def class_weight(prog_arr) -> torch.Tensor:
 
 
 def progression_loss(logits: torch.Tensor, target: torch.Tensor, region_mask: torch.Tensor,
-                     weight: torch.Tensor | None = None) -> tuple[torch.Tensor, int]:
+                     weight: torch.Tensor | None = None, loss_type: str = "ce",
+                     gamma: float = config.FOCAL_GAMMA) -> tuple[torch.Tensor, int]:
     """logits [B,29,14,3], target [B,29,14] in {0,1,2,-100}, region_mask [B,29].
-    -> (mean CE over valid cells, n_valid). Returns 0 if nothing valid (keeps batch alive)."""
+    -> (mean loss over valid cells, n_valid). Returns 0 if nothing valid (keeps batch alive).
+
+    loss_type "ce" = class-weighted cross-entropy (baseline); "focal" = the same weights times the
+    focal (1-p_t)^gamma modulator (ablation axis 2: down-weight the easy dominant "stable" cells)."""
     b, r, d, k = logits.shape
     valid = (target != C.UNKNOWN) & region_mask.bool().unsqueeze(-1)     # [B,29,14]
     if valid.sum() == 0:
@@ -40,5 +44,13 @@ def progression_loss(logits: torch.Tensor, target: torch.Tensor, region_mask: to
     flat_target = target[valid]                      # [M]
     if weight is not None:
         weight = weight.to(flat_logits.device)
-    loss = F.cross_entropy(flat_logits, flat_target, weight=weight)
+    if loss_type == "focal":
+        logp = F.log_softmax(flat_logits, dim=-1)                        # [M,3]
+        ce = F.nll_loss(logp, flat_target, weight=weight, reduction="none")   # [M] (weighted)
+        pt = logp.gather(1, flat_target[:, None]).squeeze(1).exp()       # [M]
+        loss = ((1.0 - pt) ** gamma * ce).mean()
+    elif loss_type == "ce":
+        loss = F.cross_entropy(flat_logits, flat_target, weight=weight)
+    else:
+        raise ValueError(f"unknown loss_type: {loss_type} (choose 'ce' or 'focal')")
     return loss, int(valid.sum())

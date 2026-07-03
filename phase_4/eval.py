@@ -18,6 +18,18 @@ import constants as C
 from dataset import M4Dataset, collate
 
 
+def build_from_ckpt(ck: dict, device):
+    """Rebuild the exact M4 model a ckpt was trained with (head_type / input_mode / hidden / dropout),
+    defaulting to the shipping baseline for old ckpts that only stored feat_dim. Also restores the
+    prior-present masking so eval scores the same cell set training supervised."""
+    import model as M
+    config.REQUIRE_PRIOR_PRESENT = ck.get("require_prior_present", config.REQUIRE_PRIOR_PRESENT)
+    m = M.build_model(ck["feat_dim"], ck.get("head_type", "mlp"), ck.get("input_mode", "full"),
+                      ck.get("hidden", config.HEAD_HIDDEN), ck.get("dropout", config.HEAD_DROPOUT))
+    m.load_state_dict(ck["model"])
+    return m.to(device)
+
+
 def multiclass_f1(pred: np.ndarray, tgt: np.ndarray) -> tuple[float, dict, float]:
     """pred/tgt are 1-D class indices (0/1/2). -> (macro-F1, per-class F1, change-only macro-F1)."""
     per = {}
@@ -66,13 +78,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    import model as M
     args = parse_args()
     ck = torch.load(args.ckpt, map_location=args.device)
+    m = build_from_ckpt(ck, args.device)                    # sets config.REQUIRE_PRIOR_PRESENT first
     ds = M4Dataset(args.region_cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split)
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
-    m = M.build_model(ck["feat_dim"]).to(args.device)
-    m.load_state_dict(ck["model"])
     res = evaluate(m, loader, args.device)
     print(f"[{args.split}] prog macro-F1 = {res['prog_f1_macro']:.4f}  "
           f"change-only F1 = {res['change_f1_macro']:.4f}  (n={res['n_valid']:,})")

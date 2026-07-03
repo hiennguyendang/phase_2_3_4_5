@@ -27,8 +27,66 @@ class MLPHead(nn.Module):
         return self.net(x)  # operates on the last dim; region axis is just batched
 
 
-# Placeholder so swapping is a one-word config change later.
-# class KANHead(nn.Module): ...  # FastKAN with the same (in_dim, out_dim) signature
+class _RadialBasis(nn.Module):
+    """Gaussian RBF on a fixed grid (FastKAN, Li 2024): phi_g(x) = exp(-((x - c_g)/h)^2).
+
+    Replaces the B-spline basis of the original KAN with cheap Gaussians -> same expressive
+    'learnable activation on each edge' idea, but a plain matmul. x[...,D] -> [...,D,G]."""
+
+    def __init__(self, num_grids: int, grid_min: float = -2.0, grid_max: float = 2.0):
+        super().__init__()
+        self.register_buffer("grid", torch.linspace(grid_min, grid_max, num_grids))
+        self.denom = (grid_max - grid_min) / (num_grids - 1)  # RBF width = grid spacing
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.exp(-(((x.unsqueeze(-1) - self.grid) / self.denom) ** 2))
+
+
+class _FastKANLayer(nn.Module):
+    """One FastKAN layer: LayerNorm -> RBF spline (learned edges) + SiLU base residual.
+
+    The LayerNorm keeps activations inside the [-2,2] grid so the basis stays informative."""
+
+    def __init__(self, in_dim: int, out_dim: int, num_grids: int = 8, use_base: bool = True):
+        super().__init__()
+        self.ln = nn.LayerNorm(in_dim)
+        self.rbf = _RadialBasis(num_grids)
+        self.spline = nn.Linear(in_dim * num_grids, out_dim, bias=False)
+        nn.init.trunc_normal_(self.spline.weight, std=0.1 * (in_dim * num_grids) ** -0.5)
+        self.use_base = use_base
+        if use_base:
+            self.base = nn.Linear(in_dim, out_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.spline(self.rbf(self.ln(x)).flatten(-2))     # [...,D,G] -> [...,D*G] -> [...,out]
+        if self.use_base:
+            y = y + self.base(F.silu(x))
+        return y
+
+
+class KANHead(nn.Module):
+    """FastKAN drop-in for MLPHead — SAME (in_dim, out_dim) interface, operates on the last dim
+    (region axis is just batched). Two layers (in->hidden->out) so depth matches MLPHead;
+    `num_grids` (config.KAN_GRIDS) is the spline resolution. Heavier than the MLP but the same
+    call signature, so `HEAD_TYPE='kan'` (or `--head-type kan`) swaps EVERY MLP head — concept,
+    mode-A direct-disease, global. The mode-B *faithful* concept->disease head is NOT touched
+    (it's not built via make_head), so `--head-type kan --disease-head faithful` gives a KAN
+    concept extractor feeding the same masked-non-negative bottleneck."""
+
+    def __init__(self, in_dim: int, out_dim: int, hidden: int | None = None,
+                 dropout: float | None = None, num_grids: int | None = None):
+        super().__init__()
+        hidden = config.HEAD_HIDDEN if hidden is None else hidden        # resolve at build time
+        dropout = config.CONCEPT_DROPOUT if dropout is None else dropout  # (matches MLPHead)
+        g = getattr(config, "KAN_GRIDS", 8) if num_grids is None else num_grids
+        self.net = nn.Sequential(
+            _FastKANLayer(in_dim, hidden, g),
+            nn.Dropout(dropout),
+            _FastKANLayer(hidden, out_dim, g),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
 
 
 def make_head(in_dim: int, out_dim: int, head_type: str | None = None,
@@ -37,7 +95,7 @@ def make_head(in_dim: int, out_dim: int, head_type: str | None = None,
     if head_type == "mlp":
         return MLPHead(in_dim, out_dim, hidden, dropout)
     if head_type == "kan":
-        raise NotImplementedError("FastKAN head not wired yet — keep HEAD_TYPE='mlp' for now")
+        return KANHead(in_dim, out_dim, hidden, dropout)
     raise ValueError(f"unknown head_type: {head_type}")
 
 

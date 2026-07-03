@@ -39,11 +39,10 @@ def parse_args() -> argparse.Namespace:
 
 @torch.no_grad()
 def main() -> int:
-    import model as M
+    from eval import build_from_ckpt
     args = parse_args()
     ck = torch.load(args.ckpt, map_location=args.device)
-    m = M.build_model(ck["feat_dim"]).to(args.device).eval()
-    m.load_state_dict(ck["model"])
+    m = build_from_ckpt(ck, args.device).eval()             # sets config.REQUIRE_PRIOR_PRESENT first
 
     ds = M4Dataset(args.region_cache, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split)
     loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
