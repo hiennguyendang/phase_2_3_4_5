@@ -27,6 +27,11 @@ TEMPERATURE_PATH = REPO_ROOT / "data" / "m5_temperature.json"  # written by cali
 
 # ---- tier 2: grounding -------------------------------------------------------
 TAU_REGION = 0.50      # min per-region disease prob to name a location
+GLOBAL_GROUNDING_DISEASES = {
+    "Cardiomegaly",
+    "Edema",
+    "Enlarged Cardiomediastinum",
+}
 
 # ---- tier 5: realization -----------------------------------------------------
 REALIZE = "template"   # "template" (faithful, default) | "paraphrase" (constrained LLM, pluggable)

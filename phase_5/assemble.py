@@ -53,6 +53,11 @@ def ground(m3rec: dict, disease: str) -> tuple[str | None, list[dict]]:
     return lead, hits
 
 
+def grounding_type(disease: str) -> str:
+    """GlobalHead-driven relational findings are whole-image grounded, not fake region-grounded."""
+    return "global" if disease in config.GLOBAL_GROUNDING_DISEASES else "regional"
+
+
 def region_cells(m3rec: dict, region: str | None) -> list:
     """The attention-pool 'where' cells [[row,col,weight],...] for a region (M3 infer --topk-cells).
     Faithful intra-region grounding (spec 5.2, 'tín hiệu lấy từ đâu'); [] if not dumped."""
@@ -138,17 +143,21 @@ def assemble_image(m3rec: dict, m4rec: dict | None, temps: dict | None = None) -
         if st == "omit":
             continue
         lead, region_hits = ground(m3rec, disease)
+        gtype = grounding_type(disease)
+        text_region = None if gtype == "global" else lead
         temporal = temporal_of(m4rec, disease, lead) if st != "abstain" else None
         findings.append({
             "disease": disease,
             "status": st,
             "prob": round(p, 4),
             "lead_region": lead,
+            "grounding_type": gtype,
             "regions": region_hits,
             "temporal": temporal,
-            "text": _finding_text(disease, st, lead, temporal),
+            "text": _finding_text(disease, st, text_region, temporal),
             "provenance": {                          # pointer back to the source cells
                 "m3_image_prob": round(p, 4),
+                "grounding_type": gtype,
                 "m3_lead_region": lead,
                 "m3_region_probs": {h["region"]: round(h["prob"], 4) for h in region_hits},
                 "m3_cells": region_cells(m3rec, lead),   # attention-pool "where" (tier 2)

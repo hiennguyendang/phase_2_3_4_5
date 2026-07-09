@@ -30,7 +30,8 @@ def class_weight(prog_arr) -> torch.Tensor:
 
 def progression_loss(logits: torch.Tensor, target: torch.Tensor, region_mask: torch.Tensor,
                      weight: torch.Tensor | None = None, loss_type: str = "ce",
-                     gamma: float = config.FOCAL_GAMMA) -> tuple[torch.Tensor, int]:
+                     gamma: float = config.FOCAL_GAMMA,
+                     label_smoothing: float = config.LABEL_SMOOTHING) -> tuple[torch.Tensor, int]:
     """logits [B,29,14,3], target [B,29,14] in {0,1,2,-100}, region_mask [B,29].
     -> (mean loss over valid cells, n_valid). Returns 0 if nothing valid (keeps batch alive).
 
@@ -50,7 +51,41 @@ def progression_loss(logits: torch.Tensor, target: torch.Tensor, region_mask: to
         pt = logp.gather(1, flat_target[:, None]).squeeze(1).exp()       # [M]
         loss = ((1.0 - pt) ** gamma * ce).mean()
     elif loss_type == "ce":
-        loss = F.cross_entropy(flat_logits, flat_target, weight=weight)
+        loss = F.cross_entropy(flat_logits, flat_target, weight=weight,
+                               label_smoothing=label_smoothing)
     else:
         raise ValueError(f"unknown loss_type: {loss_type} (choose 'ce' or 'focal')")
     return loss, int(valid.sum())
+
+
+def flip_consistency_loss(logits: torch.Tensor, flipped_logits: torch.Tensor,
+                          region_mask: torch.Tensor,
+                          flipped_region_mask: torch.Tensor | None = None,
+                          temperature: float = 1.0) -> tuple[torch.Tensor, int]:
+    """Symmetric KL for temporal flip consistency.
+
+    A prediction for (current, prior) should match the prediction for (prior, current) after swapping
+    improved<->worsened. Stable stays stable. Diseases listed in FLIP_EXCLUDE_DISEASES are skipped.
+    """
+    t = max(float(temperature), 1e-6)
+    flip_idx = torch.tensor(C.FLIP_CLASS_MAP, dtype=torch.long, device=logits.device)
+    aligned_flip = flipped_logits.index_select(-1, flip_idx)
+
+    logp = F.log_softmax(logits / t, dim=-1)
+    p = logp.exp()
+    logq = F.log_softmax(aligned_flip / t, dim=-1)
+    q = logq.exp()
+    kl_pq = F.kl_div(logp, q, reduction="none").sum(dim=-1)
+    kl_qp = F.kl_div(logq, p, reduction="none").sum(dim=-1)
+    loss = 0.5 * (kl_pq + kl_qp) * (t * t)
+
+    valid = region_mask.bool()
+    if flipped_region_mask is not None:
+        valid = valid & flipped_region_mask.bool()
+    valid = valid.unsqueeze(-1).expand_as(loss)
+    exclude = [C.CHEX_INDEX[n] for n in config.FLIP_EXCLUDE_DISEASES if n in C.CHEX_INDEX]
+    if exclude:
+        valid[:, :, exclude] = False
+    if valid.sum() == 0:
+        return logits.sum() * 0.0, 0
+    return loss[valid].mean(), int(valid.sum())

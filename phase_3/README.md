@@ -166,3 +166,48 @@ python phase_3/scripts/7-infer.py        --ckpt <run>/m3_A/best.pt --split test 
   definite", "cannot exclude" — `hedge.py::is_hedged`) is **masked** at M3 (`-100`, not trained as a
   confident finding). Detected from silver `phrases` or the LLM's `uncertainty_cues`, so the silver
   and LLM-pseudo paths mask identically.
+
+## Current audit
+
+Latest parsed `RUN/` + `LOGS/` summary lives in `docs/VERA_experiment_audit_roadmap.md`. Current
+decision: ship `m3_B_faithful` as the main M3 checkpoint; keep the global head; detector boxes are
+acceptable because the GT-box oracle only gives a small AUC gain. Remaining P0/P1 work is calibration,
+per-concept gating, and threshold evidence.
+
+## 2026-07-09 full rerun plan
+
+Use repo-root `phase_3.sh` for the complete post-audit rerun. It supersedes
+`phase_3/run_experiments.sh`, which remains as a legacy quick grid.
+
+```bash
+# Server/H100-mini profile: full train grid + all diagnostics.
+bash phase_3.sh --profile h100mini --tag xwalk_v2
+
+# Audit-only against existing tagged checkpoints.
+bash phase_3.sh --profile h100mini --tag xwalk_v2 --skip-train
+
+# Local smoke run on one split with small epochs.
+bash phase_3.sh --profile local4060 --tag smoke --epochs 2 --audit-splits gold
+```
+
+The full script runs, in order:
+
+- crosswalk patch: `aspiration -> Pneumonia`, `lung cancer -> Lung Lesion`,
+  `calcified nodule -> None`, `cyst/bullae -> None`, then re-derives `region_chexpert.npy`;
+- full training grid: A, B-MLP, B-faithful, B-linear, B-nonneg, C, bbox/no-bbox, neck, aggregation,
+  no-global, KAN, and GT-box oracle;
+- eval diagnostics on `val test gold`, reliability CSV/SVG, faithfulness JSON, prediction dumps;
+- threshold export and concept explanation gate for the tagged `m3_B_faithful` ship run;
+- bootstrap CI from prediction dumps;
+- M3 inference JSONL for Phase 5 and frozen M3 region cache for Phase 4.
+
+Default outputs are tagged to avoid mixing old and new labels:
+
+```text
+data/run/m3_B_faithful_xwalk_v2/best.pt
+artifacts/calibration/m3_B_faithful_xwalk_v2.thresholds.json
+artifacts/calibration/m3_B_faithful_xwalk_v2.concept_gate.json
+data/m3_pred.test.xwalk_v2.jsonl
+data/m3_pred.jsonl
+data/m4_region_cache_xwalk_v2/
+```

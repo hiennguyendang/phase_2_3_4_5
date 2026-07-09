@@ -58,6 +58,7 @@ MASK_BBOX = True                 # restrict each region query to its bbox cells 
 FUSE_BLOCKS = 1                  # cross-attn(current<-prior)+self+FFN blocks (keep shallow: overfits fast)
 FUSE_HEADS = 4
 BOX_SOURCE = "gt"                # "gt" (boxes.npy) | "detector" (boxes_det.npy) for the pool masks
+TEMPFUSE_INPUT_MODE = "feat"     # "feat" = v3; "feat_logits" adds M3 curr/prior/delta logits to the head
 
 # ---- model -------------------------------------------------------------------
 NUM_CHEX = 14
@@ -89,6 +90,7 @@ INPUT_MODE = "full"
 # ---- loss --------------------------------------------------------------------
 LOSS_TYPE = "ce"                # "ce" (baseline) | "focal" — both honor USE_CLASS_WEIGHT
 FOCAL_GAMMA = 2.0
+LABEL_SMOOTHING = 0.0           # CE only; useful for noisy silver comparison_cues
 
 REQUIRE_PRIOR_PRESENT = True    # a region is supervised only if present in BOTH curr and prior
 

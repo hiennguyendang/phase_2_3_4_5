@@ -40,6 +40,15 @@ def region_in_dim(feat_dim: int, input_mode: str = config.INPUT_MODE) -> int:
     return nf * feat_dim + nl * C.NUM_CHEX
 
 
+def tempfuse_in_dim(feat_dim: int, input_mode: str = config.TEMPFUSE_INPUT_MODE) -> int:
+    if input_mode == "feat":
+        return feat_dim
+    if input_mode == "feat_logits":
+        return feat_dim + 3 * C.NUM_CHEX
+    raise ValueError("unknown tempfuse_input_mode: "
+                     f"{input_mode} (choose 'feat' or 'feat_logits')")
+
+
 def _finish(out: torch.Tensor, head_mode: str) -> torch.Tensor:
     """[B,29,14*3] head output -> [B,29,14,3] progression logits (order: stable, improved, worsened).
     flat = raw 3-way logits; twostage = factorized P(change) x P(direction) returned as summing-to-1
@@ -97,23 +106,31 @@ class TempFuseTKAN(nn.Module):
     def __init__(self, feat_dim: int, head_type: str = config.HEAD_TYPE,
                  hidden: int = config.HEAD_HIDDEN, dropout: float = config.HEAD_DROPOUT,
                  head_mode: str = config.HEAD_MODE, fuse_blocks: int = config.FUSE_BLOCKS,
-                 fuse_heads: int = config.FUSE_HEADS):
+                 fuse_heads: int = config.FUSE_HEADS,
+                 input_mode: str = config.TEMPFUSE_INPUT_MODE):
         super().__init__()
         if head_mode not in ("flat", "twostage"):
             raise ValueError(f"unknown head_mode: {head_mode}")
+        if input_mode not in ("feat", "feat_logits"):
+            raise ValueError(f"unknown tempfuse_input_mode: {input_mode}")
         self.arch = "tempfuse"
         self.feat_dim = feat_dim
         self.head_mode = head_mode
+        self.input_mode = input_mode
         self.fuse = nn.ModuleList([CrossAttnFuse(feat_dim, fuse_heads, dropout)
                                    for _ in range(fuse_blocks)])
         self.pool = BBoxRegionPool(feat_dim, config.POOL_HEADS)
-        self.head = make_head(feat_dim, C.NUM_CHEX * C.NUM_PROG, head_type, hidden, dropout)
+        self.head = make_head(tempfuse_in_dim(feat_dim, input_mode), C.NUM_CHEX * C.NUM_PROG,
+                              head_type, hidden, dropout)
 
     def forward(self, batch: dict, return_alpha: bool = False):
         cur, prior = batch["patch_curr"], batch["patch_prior"]                # [B,196,dim]
         for blk in self.fuse:
             cur = blk(cur, prior)                                             # current<-prior fusion
         region, alpha = self.pool(cur, batch["box_curr"])                     # [B,29,dim],[B,29,196]
+        if self.input_mode == "feat_logits":
+            lc, lp = batch["logit_curr"], batch["logit_prior"]                # [B,29,14]
+            region = torch.cat([region, lc, lp, lc - lp], dim=-1)
         out = _finish(self.head(region), self.head_mode)                      # [B,29,14,3]
         return (out, alpha) if return_alpha else out
 
@@ -121,9 +138,11 @@ class TempFuseTKAN(nn.Module):
 def build_model(feat_dim: int, head_type: str = config.HEAD_TYPE,
                 input_mode: str = config.INPUT_MODE, hidden: int = config.HEAD_HIDDEN,
                 dropout: float = config.HEAD_DROPOUT, head_mode: str = config.HEAD_MODE,
-                arch: str = config.ARCH, fuse_blocks: int = config.FUSE_BLOCKS):
+                arch: str = config.ARCH, fuse_blocks: int = config.FUSE_BLOCKS,
+                tempfuse_input_mode: str = config.TEMPFUSE_INPUT_MODE):
     if arch == "regiondiff":
         return TKAN(feat_dim, head_type, input_mode, hidden, dropout, head_mode)
     if arch == "tempfuse":
-        return TempFuseTKAN(feat_dim, head_type, hidden, dropout, head_mode, fuse_blocks)
+        return TempFuseTKAN(feat_dim, head_type, hidden, dropout, head_mode, fuse_blocks,
+                            input_mode=tempfuse_input_mode)
     raise ValueError(f"unknown arch: {arch} (choose 'regiondiff' or 'tempfuse')")

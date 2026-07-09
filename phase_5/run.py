@@ -52,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--temperature", type=Path, default=config.TEMPERATURE_PATH,
                    help="per-class temperature json from calibrate.py (optional)")
     p.add_argument("--realize", default=config.REALIZE, choices=["template", "paraphrase"])
+    p.add_argument("--stats-json", type=Path, default=None, help="optional machine-readable verify stats")
     return p.parse_args()
 
 
@@ -102,6 +103,10 @@ def main() -> int:
     print(f"  normal {stats['normal']:,} | with prior {stats['with_prior']:,}")
     print(f"  out-of-table {stats['out_of_table']}/{n}  coverage-miss {stats['coverage_miss']}/{n}  "
           f"temporal-halluc {stats['temporal_halluc']}/{n}  paraphrase-fallback {stats['paraphrase_fallback']}")
+    if args.stats_json:
+        args.stats_json.parent.mkdir(parents=True, exist_ok=True)
+        args.stats_json.write_text(json.dumps(stats, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"  stats-json {args.stats_json}")
     return 0
 
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Legacy quick grid. For the full post-audit Phase-3 rerun, use repo-root `phase_3.sh`.
 # M3 experiment grid — runs SEQUENTIALLY (one job at a time: MIG slice shares SMs, parallel = slower).
 # Idempotent: a run whose best.pt already exists is skipped (delete it to re-run). Each run also
 # eval (test) + faithfulness (val); logs go to logs/<name>.*.log; a summary prints at the end.

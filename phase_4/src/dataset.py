@@ -141,7 +141,7 @@ def _boxes_by_image(m3_labels_dir: Path, box_source: str = "gt"):
 def _filter_rows(manifest, split, prior, present, has_fn, same_view_only):
     """Shared (curr,prior) row selection for both archs. has_fn(image_id) checks feature availability
     (region cache OR patch store). Returns (rows=[(prog_row,curr,prior)], skipped counters)."""
-    rows: list[tuple[int, str, str]] = []
+    rows: list[tuple[int, str, str, bool]] = []
     skipped = {"no_cue": 0, "no_prior": 0, "no_feat": 0, "no_present": 0, "split": 0, "cross_view": 0}
     for i, m in enumerate(manifest):
         if not m.get("ok", True):
@@ -161,7 +161,7 @@ def _filter_rows(manifest, split, prior, present, has_fn, same_view_only):
             skipped["no_feat"] += 1; continue
         if cid not in present or pid not in present:
             skipped["no_present"] += 1; continue
-        rows.append((i, cid, pid))
+        rows.append((i, cid, pid, same_view))
     return rows, skipped
 
 
@@ -191,7 +191,7 @@ class _M4Base(Dataset):
         labels the loss will see, for inverse-frequency class weighting."""
         if not self.rows:
             return np.zeros(C.NUM_PROG, dtype=np.int64)
-        idx = [i for i, _, _ in self.rows]
+        idx = [i for i, _, _, _ in self.rows]
         sub = np.asarray(self.prog[idx]).astype(np.int64)
         counts = np.array([(sub == k).sum() for k in range(C.NUM_PROG)], dtype=np.int64)
         if self.augment:
@@ -225,10 +225,12 @@ class _M4Base(Dataset):
     def __getitem__(self, k: int) -> dict:
         n = len(self.rows)
         flipped = self.augment and k >= n
-        i, cid, pid = self.rows[k - n] if flipped else self.rows[k]
+        i, cid, pid, same_view = self.rows[k - n] if flipped else self.rows[k]
         a, b = (pid, cid) if flipped else (cid, pid)          # flip swaps current<->prior roles
         item = {"image_id": (cid + "~flip") if flipped else cid, "prior_image_id": b,
+                "same_view": torch.tensor(float(same_view), dtype=torch.float32),
                 "region_mask": self._region_mask(a, b),
+                "region_mask_flip": self._region_mask(b, a),
                 "progression": self._progression(i, flipped)}
         item.update(self._item_tensors(a, b))
         return item
@@ -256,18 +258,38 @@ class M4PatchDataset(_M4Base):
 
     def __init__(self, features_root, m3_labels_dir, m4_labels_dir, pairs_path,
                  split: str | None = None, augment: bool = False, same_view_only: bool = False,
-                 box_source: str = config.BOX_SOURCE):
+                 box_source: str = config.BOX_SOURCE, region_cache=None,
+                 tempfuse_input_mode: str = config.TEMPFUSE_INPUT_MODE):
         self.store = features_root if isinstance(features_root, PatchStore) else PatchStore(features_root)
+        self.tempfuse_input_mode = tempfuse_input_mode
+        self.logit_cache = None
+        if tempfuse_input_mode != "feat":
+            if region_cache is None:
+                raise ValueError("tempfuse_input_mode != 'feat' requires --region-cache")
+            self.logit_cache = region_cache if isinstance(region_cache, RegionCache) else RegionCache(region_cache)
         self.boxes, self.box_row = _boxes_by_image(m3_labels_dir, box_source)
         super().__init__(m3_labels_dir, m4_labels_dir, pairs_path, split, augment,
-                         same_view_only, self.store.has)
+                         same_view_only, self._has)
         self.feat_dim = self.store.detect_dim()
+
+    def _has(self, image_id: str) -> bool:
+        if not self.store.has(image_id):
+            return False
+        return self.logit_cache is None or self.logit_cache.has(image_id)
 
     def _item_tensors(self, a: str, b: str) -> dict:
         box = np.asarray(self.boxes[self.box_row[a]], dtype=np.float32)         # current-slot boxes [29,4]
-        return {"patch_curr": torch.from_numpy(self.store.load(a)),             # [196,dim]
+        box_prior = np.asarray(self.boxes[self.box_row[b]], dtype=np.float32)   # needed for flip-KL
+        item = {"patch_curr": torch.from_numpy(self.store.load(a)),             # [196,dim]
                 "patch_prior": torch.from_numpy(self.store.load(b)),
-                "box_curr": torch.from_numpy(box)}
+                "box_curr": torch.from_numpy(box),
+                "box_prior": torch.from_numpy(box_prior)}
+        if self.logit_cache is not None:
+            _, lc = self.logit_cache.load(a)
+            _, lp = self.logit_cache.load(b)
+            item.update({"logit_curr": torch.from_numpy(lc),
+                         "logit_prior": torch.from_numpy(lp)})
+        return item
 
 
 def collate(batch: list[dict]) -> dict:
@@ -284,9 +306,11 @@ def move_batch(batch: dict, device) -> dict:
 
 
 def make_dataset(arch, m3_labels_dir, m4_labels_dir, pairs, split, *, region_cache=None,
-                 features_root=None, augment=False, same_view_only=False, box_source=config.BOX_SOURCE):
+                 features_root=None, augment=False, same_view_only=False, box_source=config.BOX_SOURCE,
+                 tempfuse_input_mode=config.TEMPFUSE_INPUT_MODE):
     """Build the dataset matching `arch` (regiondiff -> region cache; tempfuse -> M1 patch grids)."""
     if arch == "tempfuse":
         return M4PatchDataset(features_root, m3_labels_dir, m4_labels_dir, pairs, split,
-                              augment, same_view_only, box_source)
+                              augment, same_view_only, box_source, region_cache,
+                              tempfuse_input_mode)
     return M4Dataset(region_cache, m3_labels_dir, m4_labels_dir, pairs, split, augment, same_view_only)

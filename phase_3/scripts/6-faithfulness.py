@@ -19,6 +19,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "src"))  # phase_3/src
 
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -77,10 +78,21 @@ def intervention_test(model, loader, device, max_batches=20):
         cnt += int(m.sum())
     mean_delta = sums / max(cnt, 1)
     frac_correct = float((mean_delta > 0).mean())
+    per_concept = []
+    for delta, (ci, di) in zip(mean_delta, pairs):
+        per_concept.append({
+            "concept": C.CONCEPT_NAMES[ci],
+            "concept_idx": int(ci),
+            "disease": C.CHEX_NAMES[di],
+            "disease_idx": int(di),
+            "mean_delta": float(delta),
+            "correct_direction": bool(delta > 0),
+        })
     return {"median_delta": float(np.median(mean_delta)),
             "mean_delta": float(mean_delta.mean()),
             "frac_correct_direction": frac_correct,
-            "n_mapped_concepts": len(pairs)}
+            "n_mapped_concepts": len(pairs),
+            "per_concept": per_concept}
 
 
 # ---- test 3: leakage (mode C) ------------------------------------------------
@@ -122,6 +134,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--concept-f1-thresh", type=float, default=0.30,
                    help="go/no-go bar for concept-from-image macro-F1 (judgment call)")
     p.add_argument("--max-batches", type=int, default=20, help="cap for the intervention sweep")
+    p.add_argument("--diagnostics-json", type=Path, default=None,
+                   help="write concept F1 and intervention/leakage diagnostics")
     return p.parse_args()
 
 
@@ -138,22 +152,35 @@ def main() -> int:
     ds = M3Dataset(args.labels_dir, args.features_root, args.split, box_source=args.box_source)
     loader = DataLoader(ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
     print(f"[faithfulness] mode={mode} split={args.split} n={len(ds):,}\n")
+    diag = {"mode": mode, "split": args.split, "n": len(ds)}
 
     if mode == "A":
         print("Mode A (Direct): no concept channel -> 'why-by-concept' N/A. VERA = where-faithful.")
         print("  Faithfulness here = region grounding (softmax_r, alpha), reported by infer.py.")
+        diag["why_faithful_allowed"] = False
+        diag["note"] = "Mode A has no concept channel; where-faithful only."
+        if args.diagnostics_json:
+            args.diagnostics_json.parent.mkdir(parents=True, exist_ok=True)
+            args.diagnostics_json.write_text(json.dumps(diag, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"[diagnostics] wrote {args.diagnostics_json}")
         return 0
 
     # 1) go/no-go concept-from-image
     res = evaluate(m, loader, args.device)
     cf1 = res.get("concept_f1_macro", float("nan"))
     go = cf1 >= args.concept_f1_thresh
+    diag["concept_f1_macro"] = float(cf1)
+    diag["concept_f1_threshold"] = float(args.concept_f1_thresh)
+    diag["concept_go_no_go"] = bool(go)
     print(f"[1] go/no-go concept-from-image: macro-F1 = {cf1:.4f}  (bar {args.concept_f1_thresh}) "
           f"-> {'PASS' if go else 'FAIL — demote concepts to ablation'}")
 
     if mode == "B":
         iv = intervention_test(m, loader, args.device, args.max_batches)
         ok = iv["frac_correct_direction"] >= 0.7 and iv["median_delta"] > 0.01
+        diag["intervention"] = iv
+        diag["intervention_pass"] = bool(ok)
+        diag["why_faithful_allowed"] = bool(go and ok)
         print(f"[2] concept-intervention (B): median delta={iv['median_delta']:+.4f} "
               f"mean delta={iv['mean_delta']:+.4f} correct-direction={iv['frac_correct_direction']:.0%} "
               f"over {iv['n_mapped_concepts']} concepts -> {'PASS (bottleneck real)' if ok else 'FAIL (fake bottleneck)'}")
@@ -161,11 +188,18 @@ def main() -> int:
     else:  # C
         lk = leakage_test(m, loader, args.device)
         leak = lk["drop_zeroed"] < 0.02
+        diag["leakage"] = {k: float(v) for k, v in lk.items()}
+        diag["leakage_detected"] = bool(leak)
+        diag["why_faithful_allowed"] = bool(go and not leak)
         print(f"[3] leakage (C): region-F1 intact={lk['region_f1_intact']:.4f} "
               f"zeroed={lk['region_f1_zeroed']:.4f} (drop {lk['drop_zeroed']:+.4f}) "
               f"randomized={lk['region_f1_randomized']:.4f} (drop {lk['drop_randomized']:+.4f})")
         print(f"    {'LEAKAGE: concepts decorative -> do NOT present as why' if leak else 'concepts drive disease (low leakage)'}")
         print(f"\n=> 'why'-faithful claim allowed: {bool(go and not leak)}")
+    if args.diagnostics_json:
+        args.diagnostics_json.parent.mkdir(parents=True, exist_ok=True)
+        args.diagnostics_json.write_text(json.dumps(diag, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"[diagnostics] wrote {args.diagnostics_json}")
     return 0
 
 

@@ -81,3 +81,9 @@ python phase_5/run.py --m3-pred ... --m4-pred ... --temperature data/m5_temperat
   **reliability diagram** and treat poorly-calibrated rare classes as default-hedge.
 - **B5 global-finding grounding:** relational findings (cardiomegaly, diffuse edema) come from the
   M3 GlobalHead, not a box. Label them in the report as **global grounding**, not a fake region cell.
+
+## Current audit
+
+Latest parsed `RUN/` + `LOGS/` summary lives in `docs/VERA_experiment_audit_roadmap.md`. Immediate
+M5 work is to consume calibrated M3/M4 outputs, report verify statistics, and mark GlobalHead
+findings as global-grounded rather than fake region-grounded.
