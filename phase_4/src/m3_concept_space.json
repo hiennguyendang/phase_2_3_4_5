@@ -322,7 +322,7 @@
       "pos_yes": 7566,
       "neg_no": 21,
       "n_images": 2868,
-      "chexpert": "Lung Lesion"
+      "chexpert": null
     },
     {
       "idx": 30,
@@ -432,7 +432,7 @@
       "pos_yes": 2413,
       "neg_no": 65,
       "n_images": 942,
-      "chexpert": "Lung Lesion"
+      "chexpert": null
     },
     {
       "idx": 41,
@@ -482,7 +482,7 @@
       "pos_yes": 33399,
       "neg_no": 2777,
       "n_images": 9969,
-      "chexpert": null
+      "chexpert": "Pneumonia"
     },
     {
       "idx": 46,
@@ -522,7 +522,7 @@
       "pos_yes": 5185,
       "neg_no": 21,
       "n_images": 1864,
-      "chexpert": null
+      "chexpert": "Lung Lesion"
     },
     {
       "idx": 50,

@@ -71,6 +71,45 @@ def _confusion(pred: np.ndarray, tgt: np.ndarray) -> list[list[int]]:
     return mat.tolist()
 
 
+# Ordinal rank on the clinical axis improved < stable < worsened.
+# Class ids are stable=0, improved=1, worsened=2, so rank-by-id = [1, 0, 2].
+_PROG_RANK = np.array([1.0, 0.0, 2.0], dtype=np.float64)
+
+
+def ordinal_safety(pred: np.ndarray, tgt: np.ndarray) -> dict:
+    """Ordinal-safety diagnostics (report alongside F1, spec: adjacent-safe vs opposite-catastrophic).
+
+    - qwk: Quadratic Weighted Kappa on the ordered classes (penalizes improved<->worsened 4x adjacent).
+    - opposite_rate: P(pred opposite pole | true is a change class) — the catastrophic-error rate, target ~0.
+    - mean_ordinal_distance: mean |rank(pred) - rank(tgt)| on improved<stable<worsened.
+    - stable_pred_rate: fraction predicted stable (~majority baseline = collapse red flag).
+    """
+    if pred.size == 0:
+        return {k: float("nan") for k in
+                ("qwk", "opposite_rate", "mean_ordinal_distance", "stable_pred_rate")}
+    rp, rt = _PROG_RANK[pred], _PROG_RANK[tgt]
+    mod = float(np.abs(rp - rt).mean())
+    stable_pred_rate = float((pred == C.PROG_INDEX["stable"]).mean())
+    imp, wor = C.PROG_INDEX["improved"], C.PROG_INDEX["worsened"]
+    n_change = int(((tgt == imp) | (tgt == wor)).sum())
+    if n_change > 0:
+        opp = int(((tgt == imp) & (pred == wor)).sum() + ((tgt == wor) & (pred == imp)).sum())
+        opposite_rate = opp / n_change
+    else:
+        opposite_rate = float("nan")
+    k = C.NUM_PROG
+    obs = np.zeros((k, k), dtype=np.float64)
+    for t, p in zip(tgt.astype(np.int64), pred.astype(np.int64)):
+        obs[t, p] += 1
+    w = (_PROG_RANK[:, None] - _PROG_RANK[None, :]) ** 2 / (k - 1) ** 2
+    row, col, n = obs.sum(1), obs.sum(0), obs.sum()
+    exp = np.outer(row, col) / max(n, 1.0)
+    denom = float((w * exp).sum())
+    qwk = 1.0 - float((w * obs).sum()) / denom if denom > 0 else float("nan")
+    return {"qwk": qwk, "opposite_rate": opposite_rate,
+            "mean_ordinal_distance": mod, "stable_pred_rate": stable_pred_rate}
+
+
 def _slice_f1(pred: np.ndarray, tgt: np.ndarray, keys: np.ndarray, names: list[str]) -> dict:
     """Macro/per-class F1 for each key value, e.g. per disease or per region."""
     out = {}
@@ -114,9 +153,12 @@ def evaluate(model, loader, device, *, diagnostics: bool = False) -> dict:
     pred = np.concatenate(preds) if preds else np.array([], dtype=np.int64)
     tgt = np.concatenate(tgts) if tgts else np.array([], dtype=np.int64)
     if pred.size == 0:
-        return {"prog_f1_macro": float("nan"), "per_class": {}, "change_f1_macro": float("nan"), "n_valid": 0}
+        return {"prog_f1_macro": float("nan"), "per_class": {}, "change_f1_macro": float("nan"),
+                "acc": float("nan"), "n_valid": 0}
     macro, per, change = multiclass_f1(pred, tgt)
-    res = {"prog_f1_macro": macro, "per_class": per, "change_f1_macro": change, "n_valid": int(pred.size)}
+    acc = float((pred == tgt).mean())
+    res = {"prog_f1_macro": macro, "per_class": per, "change_f1_macro": change, "n_valid": int(pred.size),
+           "acc": acc, "ordinal_safety": ordinal_safety(pred, tgt)}
     if diagnostics:
         reg = np.concatenate(regs) if regs else np.array([], dtype=np.int64)
         dis = np.concatenate(diseases) if diseases else np.array([], dtype=np.int64)
@@ -142,6 +184,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--pairs", type=Path, default=config.DEFAULT_PAIRS_PATH)
     p.add_argument("--split", default="test")
     p.add_argument("--batch", type=int, default=config.BATCH)
+    p.add_argument("--workers", type=int, default=0,
+                   help="DataLoader workers for eval. Use >0 on server to parallelize feature loading.")
     p.add_argument("--device", default="cuda")
     p.add_argument("--diagnostics-json", type=Path, default=None,
                    help="write confusion matrix plus per-disease/per-region F1 diagnostics")
@@ -154,9 +198,19 @@ def main() -> int:
     m = build_from_ckpt(ck, args.device)                    # sets config.REQUIRE_PRIOR_PRESENT first
     ds = dataset_from_ckpt(ck, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split,
                            region_cache=args.region_cache, features_root=args.features_root)
-    loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
+    loader_kwargs = {
+        "batch_size": args.batch,
+        "collate_fn": collate,
+        "num_workers": args.workers,
+    }
+    if args.workers > 0:
+        loader_kwargs.update({
+            "persistent_workers": True,
+            "prefetch_factor": 2,
+        })
+    loader = DataLoader(ds, **loader_kwargs)
     res = evaluate(m, loader, args.device, diagnostics=args.diagnostics_json is not None)
-    print(f"[{args.split}] prog macro-F1 = {res['prog_f1_macro']:.4f}  "
+    print(f"[{args.split}] acc = {res['acc']:.4f}  prog macro-F1 = {res['prog_f1_macro']:.4f}  "
           f"change-only F1 = {res['change_f1_macro']:.4f}  (n={res['n_valid']:,})")
     for k, v in res["per_class"].items():
         print(f"  {k:<10} {v:.4f}")

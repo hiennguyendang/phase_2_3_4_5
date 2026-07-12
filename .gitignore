@@ -10,5 +10,4 @@ yolo_labels/
 sg_sft/
 weight/
 artifacts/
-RUN/
-LOGS/
+logs/

@@ -27,7 +27,9 @@ from losses import class_weight_from_counts, flip_consistency_loss, progression_
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train M4 T-KAN")
-    p.add_argument("--arch", default=config.ARCH, choices=["regiondiff", "tempfuse"],
+    p.add_argument("--concept-cache", type=Path, default=getattr(config, "DEFAULT_CONCEPT_CACHE", None),
+                   help="ftcb arch: [29,69] M3 concept-activation cache (from 8-precompute --concept-cache-out)")
+    p.add_argument("--arch", default=config.ARCH, choices=["regiondiff", "tempfuse", "ftcb"],
                    help="regiondiff = frozen-M3 region cache; tempfuse = M1 patch grids + cross-attn + M4 pool")
     p.add_argument("--region-cache", type=Path, default=config.DEFAULT_REGION_CACHE)
     p.add_argument("--features-root", type=Path, default=config.DEFAULT_FEATURES_ROOT,
@@ -47,10 +49,18 @@ def parse_args() -> argparse.Namespace:
                    choices=["full", "concat", "diff", "logits", "feat"])
     p.add_argument("--hidden", type=int, default=config.HEAD_HIDDEN)
     p.add_argument("--dropout", type=float, default=config.HEAD_DROPOUT)
-    p.add_argument("--loss", default=config.LOSS_TYPE, choices=["ce", "focal"])
+    p.add_argument("--loss", default=config.LOSS_TYPE, choices=["ce", "focal", "cdw"])
     p.add_argument("--focal-gamma", type=float, default=config.FOCAL_GAMMA)
+    p.add_argument("--cdw-alpha", type=float, default=config.CDW_ALPHA,
+                   help="cdw exponent: |i-c|^alpha ordinal distance penalty (Polat 2022/24); used by --loss cdw and --cdw-weight")
+    p.add_argument("--cdw-weight", type=float, default=0.0,
+                   help="hybrid: add lambda*CDW-CE on top of the base loss (safety-sensitivity frontier); 0 = off")
     p.add_argument("--label-smoothing", type=float, default=config.LABEL_SMOOTHING,
                    help="CE-only smoothing for noisy silver comparison_cues")
+    p.add_argument("--opposite-penalty-weight", type=float, default=0.0,
+                   help="extra penalty for assigning improved mass to worsened, or worsened mass to improved")
+    p.add_argument("--distance-penalty-weight", type=float, default=0.0,
+                   help="expected ordinal distance penalty on improved < stable < worsened")
     p.add_argument("--flip-consistency-weight", type=float, default=0.0,
                    help="symmetric KL weight for (curr,prior) vs flipped (prior,curr)")
     p.add_argument("--flip-consistency-temperature", type=float, default=1.0,
@@ -66,8 +76,8 @@ def parse_args() -> argparse.Namespace:
                    help="(b) keep only same-ViewPosition prior pairs (eval inherits this from the ckpt)")
     p.add_argument("--curriculum-same-view-epochs", type=int, default=0,
                    help="train first N epochs on same-view pairs, then continue on all pairs")
-    p.add_argument("--select-metric", default=config.SELECT_METRIC, choices=["macro", "change"],
-                   help="(a) which val metric selects best.pt")
+    p.add_argument("--select-metric", default=config.SELECT_METRIC, choices=["macro", "prog", "change", "acc"],
+                   help="(a) which val metric selects best.pt; all runs also save best_acc/prog/change.pt")
     p.add_argument("--patience", type=int, default=config.PATIENCE,
                    help="(a) early-stop after N evals with no val improvement (0 = off)")
     p.add_argument("--no-class-weight", action="store_true", help="disable inverse-freq class weighting")
@@ -97,6 +107,10 @@ def _rclone(*a) -> None:
 def _make_flipped_batch(batch: dict) -> dict:
     """Create the reversed temporal pair in-memory for flip-consistency regularization."""
     fb = dict(batch)
+    if "concept_curr" in batch:
+        fb["concept_curr"], fb["concept_prior"] = batch["concept_prior"], batch["concept_curr"]
+        if "logit_curr" in batch:
+            fb["logit_curr"], fb["logit_prior"] = batch["logit_prior"], batch["logit_curr"]
     if "feat_curr" in batch:
         fb["feat_curr"], fb["feat_prior"] = batch["feat_prior"], batch["feat_curr"]
         fb["logit_curr"], fb["logit_prior"] = batch["logit_prior"], batch["logit_curr"]
@@ -127,7 +141,7 @@ def main() -> int:
 
     ds_kw = dict(region_cache=args.region_cache, features_root=args.features_root,
                  same_view_only=args.same_view, box_source=args.box_source,
-                 tempfuse_input_mode=args.tempfuse_input_mode)
+                 tempfuse_input_mode=args.tempfuse_input_mode, concept_cache=args.concept_cache)
     train_ds = make_dataset(args.arch, args.m3_labels_dir, args.m4_labels_dir, args.pairs, "train",
                             augment=config.AUGMENT_TIME_FLIP and not args.no_augment, **ds_kw)
     curriculum_ds = None
@@ -153,7 +167,10 @@ def main() -> int:
                   f"tf_input={args.tempfuse_input_mode} "
                   f"tempfuse_in_dim={M.tempfuse_in_dim(feat_dim, args.tempfuse_input_mode)}")
     print(f"feat_dim={feat_dim} | input={args.input_mode} | {extra} | head={args.head_type}/{args.head_mode} | "
-          f"loss={args.loss} label_smoothing={args.label_smoothing:g} | "
+          f"loss={args.loss}{f' alpha={args.cdw_alpha:g}' if args.loss == 'cdw' else ''}"
+          f"{f' +cdw{args.cdw_weight:g}@a{args.cdw_alpha:g}' if args.cdw_weight > 0 else ''} "
+          f"label_smoothing={args.label_smoothing:g} | "
+          f"opp_pen={args.opposite_penalty_weight:g} dist_pen={args.distance_penalty_weight:g} | "
           f"flip_kl={args.flip_consistency_weight:g}@T{args.flip_consistency_temperature:g} | "
           f"require_prior={config.REQUIRE_PRIOR_PRESENT} | "
           f"select={args.select_metric} patience={args.patience} "
@@ -184,6 +201,10 @@ def main() -> int:
             "box_source": args.box_source, "fuse_blocks": args.fuse_blocks,
             "tempfuse_input_mode": args.tempfuse_input_mode,
             "label_smoothing": args.label_smoothing,
+            "cdw_alpha": args.cdw_alpha,
+            "cdw_weight": args.cdw_weight,
+            "opposite_penalty_weight": args.opposite_penalty_weight,
+            "distance_penalty_weight": args.distance_penalty_weight,
             "flip_consistency_weight": args.flip_consistency_weight,
             "flip_consistency_temperature": args.flip_consistency_temperature,
             "require_prior_present": config.REQUIRE_PRIOR_PRESENT,
@@ -198,6 +219,7 @@ def main() -> int:
             _rclone("copy", str(run_dir), remote, "--transfers", "4", "--quiet")
 
     best, start_epoch = -1.0, 0
+    bests = {"acc": -1.0, "prog": -1.0, "change": -1.0}
     if args.resume:
         if remote:
             _rclone("copy", remote, str(run_dir), "--quiet")
@@ -207,6 +229,13 @@ def main() -> int:
             model.load_state_dict(ck["model"]); opt.load_state_dict(ck["opt"])
             sched.load_state_dict(ck["sched"]); start_epoch = ck["epoch"] + 1
             best = ck.get("best", -1.0)
+            bests.update(ck.get("bests", {}))
+            if bests["prog"] < 0 and "val_f1" in ck:
+                bests["prog"] = float(ck["val_f1"])
+            if bests["change"] < 0 and "val_change_f1" in ck:
+                bests["change"] = float(ck["val_change_f1"])
+            if bests["acc"] < 0 and "val_acc" in ck:
+                bests["acc"] = float(ck["val_acc"])
             print(f"[resume] from epoch {start_epoch} (best {best:.4f})")
         else:
             print("[resume] no last.pt -> fresh start")
@@ -222,7 +251,11 @@ def main() -> int:
             logits = model(b)
             loss, nval = progression_loss(logits, b["progression"], b["region_mask"], weight,
                                           loss_type=args.loss, gamma=args.focal_gamma,
-                                          label_smoothing=args.label_smoothing)
+                                          label_smoothing=args.label_smoothing,
+                                          cdw_alpha=args.cdw_alpha,
+                                          cdw_weight=args.cdw_weight,
+                                          opposite_penalty_weight=args.opposite_penalty_weight,
+                                          distance_penalty_weight=args.distance_penalty_weight)
             if args.flip_consistency_weight > 0:
                 flipped_logits = model(_make_flipped_batch(b))
                 kl, _ = flip_consistency_loss(
@@ -234,16 +267,19 @@ def main() -> int:
             step += 1
             if args.sync_every and step % args.sync_every == 0:
                 torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
-                            "sched": sched.state_dict(), "epoch": epoch, "best": best, **mcfg},
+                            "sched": sched.state_dict(), "epoch": epoch, "best": best,
+                            "bests": bests, **mcfg},
                            run_dir / "last.pt")
                 push()
         sched.step()
         res = evaluate(model, vl, args.device)
         f1 = res["prog_f1_macro"]
-        # (a) select best.pt by the chosen val metric (macro = old behaviour, change = headline)
-        sel = res["change_f1_macro"] if args.select_metric == "change" else f1
+        metrics = {"acc": res["acc"], "prog": f1, "change": res["change_f1_macro"]}
+        # (a) select best.pt by the chosen val metric (macro/prog = old behaviour, change = headline)
+        sel_key = "prog" if args.select_metric == "macro" else args.select_metric
+        sel = metrics[sel_key]
         print(f"epoch {epoch + 1:3}/{args.epochs} | loss {run_loss/max(run_n,1):.4f} | "
-              f"val prog-F1 {f1:.4f} change-F1 {res['change_f1_macro']:.4f} "
+              f"val acc {res['acc']:.4f} prog-F1 {f1:.4f} change-F1 {res['change_f1_macro']:.4f} "
               f"(per {{ {', '.join(f'{k}:{v:.2f}' for k,v in res['per_class'].items())} }})")
 
         is_best = sel > best
@@ -253,17 +289,28 @@ def main() -> int:
             stale += 1
         ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                 "epoch": epoch, "val_f1": f1, "val_change_f1": res["change_f1_macro"],
-                "select_metric": args.select_metric, "best": best, **mcfg}
+                "val_acc": res["acc"], "select_metric": args.select_metric, "best": best,
+                "bests": bests, **mcfg}
         torch.save(ckpt, run_dir / "last.pt")
         if is_best:
             torch.save(ckpt, run_dir / "best.pt")
+        for key, value in metrics.items():
+            if value > bests[key]:
+                bests[key] = value
+                ckpt["bests"] = dict(bests)
+                ckpt["best_variant"] = key
+                torch.save(ckpt, run_dir / f"best_{key}.pt")
         push()
         if args.patience and stale >= args.patience:      # (a) early stop
             print(f"[early-stop] no val-{args.select_metric} gain in {args.patience} evals "
                   f"(best {best:.4f})")
             break
 
-    print(f"\n[DONE] best val {args.select_metric}-F1 = {best:.4f} -> {run_dir/'best.pt'}")
+    print(f"\n[DONE] best selected val {args.select_metric} = {best:.4f} -> {run_dir/'best.pt'}")
+    print("[DONE] best variants -> "
+          f"acc={bests['acc']:.4f} ({run_dir/'best_acc.pt'}), "
+          f"prog={bests['prog']:.4f} ({run_dir/'best_prog.pt'}), "
+          f"change={bests['change']:.4f} ({run_dir/'best_change.pt'})")
     return 0
 
 

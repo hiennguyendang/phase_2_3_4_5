@@ -34,6 +34,24 @@ def _confusion(pred: np.ndarray, tgt: np.ndarray) -> list[list[int]]:
     return mat.tolist()
 
 
+def _accuracy(pred: np.ndarray, tgt: np.ndarray) -> tuple[float, float]:
+    """Return (plain accuracy, balanced/macro accuracy = mean per-class recall).
+
+    Balanced accuracy is the metric comparable to BioViL-T / CoCa-CXR MS-CXR-T
+    per-finding numbers (3-class improving/stable/worsening).
+    """
+    if tgt.size == 0:
+        return float("nan"), float("nan")
+    acc = float((pred == tgt).mean())
+    recalls = []
+    for c in range(C.NUM_PROG):
+        m = tgt == c
+        if m.any():
+            recalls.append(float((pred[m] == c).mean()))
+    bal = float(np.mean(recalls)) if recalls else float("nan")
+    return acc, bal
+
+
 def _metrics(pred: np.ndarray, tgt: np.ndarray) -> dict:
     valid = tgt != C.UNKNOWN
     flat_pred = pred[valid]
@@ -42,25 +60,37 @@ def _metrics(pred: np.ndarray, tgt: np.ndarray) -> dict:
         return {"prog_f1_macro": float("nan"), "change_f1_macro": float("nan"),
                 "per_class": {}, "per_finding": {}, "n_valid": 0}
     macro, per, change = multiclass_f1(flat_pred, flat_tgt)
+    acc, bal_acc = _accuracy(flat_pred, flat_tgt)
     out = {
         "prog_f1_macro": macro,
         "change_f1_macro": change,
+        "accuracy": acc,
+        "balanced_accuracy": bal_acc,
         "per_class": per,
         "n_valid": int(flat_tgt.size),
         "confusion": {"labels": C.PROG_NAMES, "matrix_true_by_pred": _confusion(flat_pred, flat_tgt)},
         "per_finding": {},
     }
+    finding_acc, finding_bal = [], []
     for j, finding in enumerate(FINDINGS):
         m = valid[:, j]
         if not m.any():
             continue
         f_macro, f_per, f_change = multiclass_f1(pred[m, j], tgt[m, j])
+        f_acc, f_bal = _accuracy(pred[m, j], tgt[m, j])
+        finding_acc.append(f_acc)
+        finding_bal.append(f_bal)
         out["per_finding"][finding] = {
             "n": int(m.sum()),
             "macro_f1": f_macro,
             "change_f1": f_change,
+            "accuracy": f_acc,
+            "balanced_accuracy": f_bal,
             "per_class": f_per,
         }
+    # Average across findings = the number comparable to BioViL-T "Average" row.
+    out["avg_finding_accuracy"] = float(np.mean(finding_acc)) if finding_acc else float("nan")
+    out["avg_finding_balanced_accuracy"] = float(np.mean(finding_bal)) if finding_bal else float("nan")
     return out
 
 
@@ -128,9 +158,13 @@ def main() -> int:
     print(f"[MS-CXR-T] rows={len(raw_rows):,} used={len(ds):,} skipped={ds.skipped}")
     for agg, res in result["aggregations"].items():
         print(f"  agg={agg:<4} macro-F1={res['prog_f1_macro']:.4f} "
-              f"change-F1={res['change_f1_macro']:.4f} n={res['n_valid']:,}")
-        for name, val in res["per_class"].items():
-            print(f"    {name:<10} {val:.4f}")
+              f"change-F1={res['change_f1_macro']:.4f} acc={res['accuracy']:.4f} "
+              f"bal-acc={res['balanced_accuracy']:.4f} n={res['n_valid']:,}")
+        print(f"    avg-finding acc={res['avg_finding_accuracy']:.4f} "
+              f"bal-acc={res['avg_finding_balanced_accuracy']:.4f}  (BioViL-T avg=0.602, CoCa-CXR=0.650)")
+        for finding, fv in res["per_finding"].items():
+            print(f"    {finding:<16} acc={fv['accuracy']:.4f} bal-acc={fv['balanced_accuracy']:.4f} "
+                  f"change-F1={fv['change_f1']:.4f} n={fv['n']}")
     if args.out_json is not None:
         args.out_json.parent.mkdir(parents=True, exist_ok=True)
         args.out_json.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -18,6 +18,7 @@
 #   9) optional M5 assembly if m3_pred.jsonl is available
 
 set -euo pipefail
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION="${PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION:-python}"
 
 PROFILE="h100mini"
 TAG="${TAG:-xwalk_v2}"
@@ -33,6 +34,7 @@ RUN_INFER=1
 RUN_M5_IF_READY=1
 AUDIT_SPLITS="${AUDIT_SPLITS:-val test gold}"
 INFER_SPLITS="${INFER_SPLITS:-test gold}"
+M4_MATRIX_SCOPE="${M4_MATRIX_SCOPE:-full}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,6 +67,7 @@ fi
 case "$PROFILE" in
   local4060)
     W="${W:-4}"
+    EVAL_W="${EVAL_W:-$W}"
     BATCH="${BATCH:-16}"
     EVAL_BATCH="${EVAL_BATCH:-24}"
     DEVICE="${DEVICE:-cuda}"
@@ -73,6 +76,7 @@ case "$PROFILE" in
     ;;
   h100mini)
     W="${W:-16}"
+    EVAL_W="${EVAL_W:-32}"
     BATCH="${BATCH:-128}"
     EVAL_BATCH="${EVAL_BATCH:-128}"
     DEVICE="${DEVICE:-cuda}"
@@ -131,6 +135,8 @@ echo "pairs=$PAIRS"
 echo "cache=$CACHE"
 echo "runs=$RUNS run_suffix=$RUN_SUFFIX"
 echo "audit_splits=$AUDIT_SPLITS"
+echo "workers=$W eval_workers=$EVAL_W batch=$BATCH eval_batch=$EVAL_BATCH"
+echo "m4_matrix_scope=$M4_MATRIX_SCOPE"
 
 echo
 echo "===== 0) preflight: Phase 3 must be faithful first ====="
@@ -178,7 +184,7 @@ if [[ "$REBUILD_LABELS" == "1" ]]; then
   fi
   "$PY" phase_4/scripts/1-labels.py \
     --scene-root "$SCENE_ROOT" \
-    --out-dir "$M4LAB" 2>&1 | tee "$LOGDIR/01_labels.log"
+    --out-dir "$M4LAB" 2>&1 | tee -a "$LOGDIR/01_labels.log"
 else
   echo
   echo "===== 2) M4 labels: using existing $M4LAB ====="
@@ -186,7 +192,7 @@ fi
 
 echo
 echo "===== 3) M4 dataset stats ====="
-"$PY" phase_4/scripts/dataset_stats.py 2>&1 | tee "$LOGDIR/02_dataset_stats.log"
+"$PY" phase_4/scripts/dataset_stats.py 2>&1 | tee -a "$LOGDIR/02_dataset_stats.log"
 
 if [[ "$RUN_CACHE" == "1" ]]; then
   echo
@@ -198,7 +204,7 @@ if [[ "$RUN_CACHE" == "1" ]]; then
     --out-dir "$CACHE" \
     --batch "$EVAL_BATCH" \
     --workers "$W" \
-    --device "$DEVICE" 2>&1 | tee "$LOGDIR/03_region_cache.log"
+    --device "$DEVICE" 2>&1 | tee -a "$LOGDIR/03_region_cache.log"
 fi
 
 if [[ "$TRAIN" == "1" ]]; then
@@ -210,6 +216,8 @@ if [[ "$TRAIN" == "1" ]]; then
   RUN_SUFFIX="$RUN_SUFFIX" \
   M3_CKPT="$M3_CKPT" M3LAB="$M3LAB" M4LAB="$M4LAB" PAIRS="$PAIRS" CACHE="$CACHE" \
   FEAT="$FEAT" RUNS="$RUNS" MS_CSV="$MS_CSV" LOGDIR="$LOGDIR/matrix" \
+  EVAL_W="$EVAL_W" \
+  M4_MATRIX_SCOPE="$M4_MATRIX_SCOPE" \
   DIAGDIR="$DIAGDIR" PLOTDIR="$PLOTDIR/matrix" \
     bash phase_4/run_m4_retrain_matrix.sh "${matrix_args[@]}"
 else
@@ -232,9 +240,10 @@ eval_run_split() {
     --pairs "$PAIRS" \
     --split "$split" \
     --batch "$EVAL_BATCH" \
+    --workers "$EVAL_W" \
     --device "$DEVICE" \
     --diagnostics-json "$diag" \
-    2>&1 | tee "$LOGDIR/$run.$split.eval.log"
+    2>&1 | tee -a "$LOGDIR/$run.$split.eval.log"
   if [[ -f "$MS_CSV" && "$split" == "test" ]]; then
     "$PY" phase_4/scripts/5-mscxrt_audit.py \
       --ckpt "$ck" \
@@ -247,7 +256,7 @@ eval_run_split() {
       --workers "$W" \
       --device "$DEVICE" \
       --out-json "$msdiag" \
-      2>&1 | tee "$LOGDIR/$run.mscxrt.log"
+      2>&1 | tee -a "$LOGDIR/$run.mscxrt.log"
   fi
 }
 
@@ -277,7 +286,7 @@ plot_args=(--out-dir "$PLOTDIR")
 [[ ${#ms_files[@]} -gt 0 ]] && plot_args+=(--mscxrt "${ms_files[@]}")
 [[ ${#train_logs[@]} -gt 0 ]] && plot_args+=(--train-logs "${train_logs[@]}")
 "$PY" phase_4/scripts/plot_diagnostics.py "${plot_args[@]}" \
-  2>&1 | tee "$LOGDIR/phase4_$TAG.plots.log"
+  2>&1 | tee -a "$LOGDIR/phase4_$TAG.plots.log"
 
 pick_ship_ckpt() {
   local candidates=(
@@ -321,7 +330,7 @@ if [[ "$RUN_INFER" == "1" && -n "$SHIP_CKPT" && -f "$SHIP_CKPT" ]]; then
       --out "$out" \
       --batch "$EVAL_BATCH" \
       --device "$DEVICE" \
-      2>&1 | tee "$LOGDIR/$ship_name.infer.$split.log"
+      2>&1 | tee -a "$LOGDIR/$ship_name.infer.$split.log"
     if [[ "$split" == "test" ]]; then
       cp "$out" "$M4_PRED_DIR/m4_pred.jsonl"
       echo "[m5-default] copied $out -> $M4_PRED_DIR/m4_pred.jsonl"
@@ -340,7 +349,7 @@ if [[ "$RUN_M5_IF_READY" == "1" && -f "$M3_PRED" && -f "$M4_PRED_DIR/m4_pred.jso
     --m4-pred "$M4_PRED_DIR/m4_pred.jsonl" \
     --out "$PLOTDIR/m5_reports.jsonl" \
     --stats-json "$PLOTDIR/m5_stats.json" \
-    2>&1 | tee "$LOGDIR/phase4_$TAG.m5.log"
+    2>&1 | tee -a "$LOGDIR/phase4_$TAG.m5.log"
 fi
 
 echo

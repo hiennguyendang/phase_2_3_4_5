@@ -41,7 +41,8 @@ EDITS: dict[str, str | None] = {
 def parse_args() -> argparse.Namespace:
     import config
     p = argparse.ArgumentParser(description="Patch concept->CheXpert crosswalk + re-derive region CheXpert")
-    p.add_argument("--concept-space", type=Path, default=config.REPO_ROOT / "data" / "m3_concept_space.json")
+    default_concept_space = Path(__file__).resolve().parents[1] / "src" / "m3_concept_space.json"
+    p.add_argument("--concept-space", type=Path, default=default_concept_space)
     p.add_argument("--labels-dir", type=Path, default=config.DEFAULT_LABELS_DIR)
     p.add_argument("--dry-run", action="store_true", help="show the diff, write nothing")
     return p.parse_args()

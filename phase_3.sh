@@ -16,6 +16,7 @@
 #   bash phase_3.sh --profile local4060 --tag smoke --epochs 2 --audit-splits gold
 
 set -euo pipefail
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION="${PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION:-python}"
 
 PROFILE="h100mini"
 TAG="${TAG:-xwalk_v2}"
@@ -24,6 +25,7 @@ EP=""
 APPLY_CROSSWALK=1
 TRAIN=1
 FORCE=0
+FAITHFUL_ONLY="${FAITHFUL_ONLY:-0}"
 RUN_INFER=1
 RUN_M4_CACHE=1
 RUN_M5_IF_READY=1
@@ -45,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --no-crosswalk) APPLY_CROSSWALK=0; shift ;;
     --skip-train) TRAIN=0; shift ;;
     --force) FORCE=1; shift ;;
+    --faithful-only) FAITHFUL_ONLY=1; shift ;;
     --skip-infer) RUN_INFER=0; shift ;;
     --skip-m4-cache) RUN_M4_CACHE=0; shift ;;
     --skip-m5) RUN_M5_IF_READY=0; shift ;;
@@ -107,6 +110,7 @@ echo "features=$FEAT"
 echo "labels=$LABELS"
 echo "runs=$RUNS"
 echo "audit_splits=$AUDIT_SPLITS"
+echo "faithful_only=$FAITHFUL_ONLY"
 
 echo
 echo "===== 0) compile Phase-3 scripts ====="
@@ -176,6 +180,19 @@ train_one() {
     return 0
   fi
 
+  local audits_complete=1
+  for split in $AUDIT_SPLITS; do
+    [[ -f "$DIAGDIR/$name.$split.diagnostics.json" ]] || audits_complete=0
+    [[ -f "$DIAGDIR/$name.$split.faithfulness.json" ]] || audits_complete=0
+    if [[ "$base" == "m3_B_faithful" || "$base" == m3_Bf_* ]]; then
+      [[ -f "$PRED_DUMPS/$name.$split.predictions.npz" ]] || audits_complete=0
+    fi
+  done
+  if [[ "$audits_complete" == "1" && "$FORCE" != "1" ]]; then
+    echo "[skip audits] diagnostics/faithfulness already exist for $name"
+    return 0
+  fi
+
   "$PY" phase_3/scripts/5-eval.py \
     --ckpt "$ck" \
     --labels-dir "$LABELS" \
@@ -189,7 +206,7 @@ train_one() {
   for split in $AUDIT_SPLITS; do
     local diag="$DIAGDIR/$name.$split.diagnostics.json"
     local pred_args=()
-    if [[ "$base" == "m3_B_faithful" ]]; then
+    if [[ "$base" == "m3_B_faithful" || "$base" == m3_Bf_* ]]; then
       pred_args+=(--pred-dump "$PRED_DUMPS/$name.$split.predictions.npz")
     fi
     "$PY" phase_3/scripts/5-eval.py \
@@ -223,24 +240,124 @@ train_one() {
   done
 }
 
+select_faithful_ship() {
+  local picked
+  local selection="$DIAGDIR/phase3_$TAG.faithful_selection.json"
+  if picked=$("$PY" - "$DIAGDIR" "$RUNS" "$TAG" "$selection" "$@" <<'PY'
+import json
+import math
+import sys
+from pathlib import Path
+
+diagdir = Path(sys.argv[1])
+runs = Path(sys.argv[2])
+tag = sys.argv[3]
+selection = Path(sys.argv[4])
+bases = sys.argv[5:]
+rows = []
+for base in bases:
+    name = f"{base}_{tag}"
+    ckpt = runs / name / "best.pt"
+    diag_path = diagdir / f"{name}.val.diagnostics.json"
+    faith_path = diagdir / f"{name}.val.faithfulness.json"
+    test_diag_path = diagdir / f"{name}.test.diagnostics.json"
+    row = {
+        "name": name,
+        "checkpoint": str(ckpt),
+        "val_diagnostics": str(diag_path),
+        "val_faithfulness": str(faith_path),
+        "checkpoint_exists": ckpt.exists(),
+        "faithfulness_pass": False,
+    }
+    if diag_path.exists():
+        d = json.loads(diag_path.read_text(encoding="utf-8"))
+        row["val_image_auc_macro"] = d.get("image_auc_macro")
+        row["val_image_f1_macro"] = d.get("image_f1_macro")
+        row["val_concept_f1_macro"] = d.get("concept_f1_macro")
+    if test_diag_path.exists():
+        d = json.loads(test_diag_path.read_text(encoding="utf-8"))
+        row["test_image_auc_macro"] = d.get("image_auc_macro")
+        row["test_image_f1_macro"] = d.get("image_f1_macro")
+        row["test_concept_f1_macro"] = d.get("concept_f1_macro")
+    if faith_path.exists():
+        f = json.loads(faith_path.read_text(encoding="utf-8"))
+        row["faithfulness_pass"] = bool(f.get("why_faithful_allowed"))
+        row["val_concept_go_no_go"] = bool(f.get("concept_go_no_go"))
+        row["val_intervention_pass"] = bool(f.get("intervention_pass"))
+    rows.append(row)
+
+def good_number(x):
+    return isinstance(x, (int, float)) and not math.isnan(float(x))
+
+eligible = [
+    r for r in rows
+    if r["checkpoint_exists"] and r["faithfulness_pass"] and good_number(r.get("val_image_auc_macro"))
+]
+eligible.sort(
+    key=lambda r: (
+        float(r.get("val_image_auc_macro", -1.0)),
+        float(r.get("val_image_f1_macro", -1.0)) if good_number(r.get("val_image_f1_macro")) else -1.0,
+        float(r.get("val_concept_f1_macro", -1.0)) if good_number(r.get("val_concept_f1_macro")) else -1.0,
+    ),
+    reverse=True,
+)
+out = {
+    "selection_rule": "highest val_image_auc_macro among detector-box B-faithful variants with why_faithful_allowed=true on val",
+    "selected": eligible[0]["name"] if eligible else None,
+    "candidates": rows,
+}
+selection.parent.mkdir(parents=True, exist_ok=True)
+selection.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+if not eligible:
+    raise SystemExit(1)
+print(eligible[0]["name"])
+PY
+  ); then
+    SHIP="$picked"
+    SHIP_CKPT="$RUNS/$SHIP/best.pt"
+    echo "[select] faithful ship=$SHIP"
+    echo "[select] summary=$selection"
+  else
+    SHIP="m3_B_faithful_$TAG"
+    SHIP_CKPT="$RUNS/$SHIP/best.pt"
+    echo "[warn] no eligible faithful variant found; falling back to $SHIP" >&2
+    echo "[warn] selection summary=$selection" >&2
+  fi
+}
+
 echo
-echo "===== 3) full training grid ====="
+echo "===== 3) faithful detector variants first ====="
+FAITHFUL_CANDIDATES=(
+  m3_B_faithful
+  m3_Bf_aggmax
+  m3_Bf_aggmean
+  m3_Bf_noglobal
+)
 train_one m3_B_faithful  detector  --mode B --disease-head faithful
-train_one m3_A           detector  --mode A
-train_one m3_B           detector  --mode B --disease-head mlp
-train_one m3_B_linear    detector  --mode B --disease-head linear
-train_one m3_B_nonneg    detector  --mode B --disease-head nonneg
-train_one m3_C           detector  --mode C
-train_one m3_Bf_nomask   detector  --mode B --disease-head faithful --no-mask-bbox
-train_one m3_Bf_neck128  detector  --mode B --disease-head faithful --neck-dim 128
 train_one m3_Bf_aggmax   detector  --mode B --disease-head faithful --region-agg max
 train_one m3_Bf_aggmean  detector  --mode B --disease-head faithful --region-agg mean
 train_one m3_Bf_noglobal detector  --mode B --disease-head faithful --no-global-head
-train_one m3_Bf_kan      detector  --mode B --disease-head faithful --head-type kan
-train_one m3_Bf_gtbox    gt        --mode B --disease-head faithful
 
-SHIP="m3_B_faithful_$TAG"
-SHIP_CKPT="$RUNS/$SHIP/best.pt"
+if [[ -n "${SHIP_M3_NAME:-}" ]]; then
+  SHIP="$SHIP_M3_NAME"
+  SHIP_CKPT="$RUNS/$SHIP/best.pt"
+  echo "[select] SHIP_M3_NAME override: $SHIP"
+else
+  select_faithful_ship "${FAITHFUL_CANDIDATES[@]}"
+fi
+
+if [[ "$FAITHFUL_ONLY" == "1" ]]; then
+  echo
+  echo "===== 3b) skipped non-faithful/full-grid ablations (--faithful-only) ====="
+else
+  echo
+  echo "===== 3b) remaining full-grid ablations ====="
+  train_one m3_A           detector  --mode A
+  train_one m3_B           detector  --mode B --disease-head mlp
+  train_one m3_B_linear    detector  --mode B --disease-head linear
+  train_one m3_C           detector  --mode C
+  train_one m3_Bf_gtbox    gt        --mode B --disease-head faithful
+fi
 
 echo
 echo "===== 4) thresholds, concept gates, bootstrap for ship run ====="

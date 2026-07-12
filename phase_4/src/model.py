@@ -20,7 +20,8 @@ import torch.nn.functional as F
 
 import config
 import constants as C
-from heads import make_head
+from concept_severity import severity_vector
+from heads import FaithfulTemporalConceptHead, make_head
 from pooling import BBoxRegionPool, CrossAttnFuse
 
 # in_dim per input_mode, as a multiple of (feat_dim, NUM_CHEX)  [regiondiff only]
@@ -135,6 +136,24 @@ class TempFuseTKAN(nn.Module):
         return (out, alpha) if return_alpha else out
 
 
+class FTCBTKAN(nn.Module):
+    """ftcb arch — Faithful Temporal Concept Bottleneck. Consumes the frozen-M3 CONCEPT cache
+    (c_prior/c_current [29,69]) plus the M3 disease logits, and routes progression THROUGH directed
+    concept deltas via a masked non-negative map. The concept layer is the sole path to the output,
+    so the direction/magnitude contributions are the model's actual computation (spec Part A)."""
+
+    def __init__(self, feat_dim: int | None = None):
+        super().__init__()
+        self.arch = "ftcb"
+        self.feat_dim = feat_dim                                  # unused; kept for build uniformity
+        self.head = FaithfulTemporalConceptHead(
+            severity_vector().tolist(), C.CONCEPT_TO_CHEX, C.NUM_CHEX)
+
+    def forward(self, batch: dict, return_contrib: bool = False):
+        return self.head(batch["concept_prior"], batch["concept_curr"],
+                         batch["logit_prior"], batch["logit_curr"], return_contrib=return_contrib)
+
+
 def build_model(feat_dim: int, head_type: str = config.HEAD_TYPE,
                 input_mode: str = config.INPUT_MODE, hidden: int = config.HEAD_HIDDEN,
                 dropout: float = config.HEAD_DROPOUT, head_mode: str = config.HEAD_MODE,
@@ -145,4 +164,6 @@ def build_model(feat_dim: int, head_type: str = config.HEAD_TYPE,
     if arch == "tempfuse":
         return TempFuseTKAN(feat_dim, head_type, hidden, dropout, head_mode, fuse_blocks,
                             input_mode=tempfuse_input_mode)
-    raise ValueError(f"unknown arch: {arch} (choose 'regiondiff' or 'tempfuse')")
+    if arch == "ftcb":
+        return FTCBTKAN(feat_dim)
+    raise ValueError(f"unknown arch: {arch} (choose 'regiondiff', 'tempfuse', or 'ftcb')")

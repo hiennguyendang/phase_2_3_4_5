@@ -79,6 +79,59 @@ class KANHead(nn.Module):
         return self.l2(self.drop(self.l1(x)))
 
 
+class FaithfulTemporalConceptHead(nn.Module):
+    """FTCB head: per-(region, disease) progression from DIRECTED concept deltas (spec Part A section 5).
+
+    Given concept activations c_prior/c_current [B,29,69] and M3 disease logits logit_prior/current
+    [B,29,14], with per-concept severity sign s_c and concept->disease mask M[d,c]:
+
+        e_{r,c}   = s_c * (c_cur - c_prior)                      directed evidence (worse if >0)
+        z_{r,d}   = sum_c softplus(W_dir[d,c]) * M[d,c] * e_{r,c}     direction score  (>0 -> worsened)
+        m_{r,d}   = b_d + sum_c softplus(W_mag[d,c]) * M[d,c] * |e_{r,c}|
+                       + softplus(w_logit_d) * |Δlogit_d|            change magnitude
+        P(change) = sigmoid(m);  P(worse)=P(change)*sigmoid(z);  P(improve)=P(change)*(1-sigmoid(z))
+
+    Faithful by construction (non-negative masked weights: a mapped concept can only push its own
+    disease, and the direction comes from the signed concept delta, not an arbitrary weight). Time
+    reversal is exact by construction: swapping prior<->current sends e -> -e, so z -> -z (worse<->improve)
+    while |e| and m are unchanged (stable preserved) — no KL regularizer needed. Returns log-probs
+    [B,29,14,3] in the shared order [stable, improved, worsened].
+    """
+
+    def __init__(self, severity_sign, concept_to_chex, num_chex: int):
+        super().__init__()
+        n_concept = len(severity_sign)
+        mask = torch.zeros(num_chex, n_concept)
+        for c, d in enumerate(concept_to_chex):
+            if d is not None and d >= 0:
+                mask[d, c] = 1.0
+        self.register_buffer("mask", mask)                                   # [14,69]
+        self.register_buffer("sign", torch.as_tensor(severity_sign, dtype=torch.float32))  # [69]
+        self.W_dir = nn.Parameter(torch.zeros(num_chex, n_concept))
+        self.W_mag = nn.Parameter(torch.zeros(num_chex, n_concept))
+        self.w_logit = nn.Parameter(torch.zeros(num_chex))
+        self.b_mag = nn.Parameter(torch.zeros(num_chex))
+
+    def forward(self, c_prior, c_cur, logit_prior, logit_cur, return_contrib: bool = False):
+        e = self.sign * (c_cur - c_prior)                                    # [B,29,69]
+        w_dir = F.softplus(self.W_dir) * self.mask                           # [14,69] >=0, masked
+        w_mag = F.softplus(self.W_mag) * self.mask
+        z = torch.einsum("brc,dc->brd", e, w_dir)                            # [B,29,14]
+        m = (self.b_mag + torch.einsum("brc,dc->brd", e.abs(), w_mag)
+             + F.softplus(self.w_logit) * (logit_cur - logit_prior).abs())   # [B,29,14]
+        log_change = F.logsigmoid(m)
+        log_stable = F.logsigmoid(-m)
+        pw = torch.sigmoid(z)                                                 # P(worsened | change)
+        log_wor = log_change + torch.log(pw.clamp(min=1e-6))
+        log_imp = log_change + torch.log((1.0 - pw).clamp(min=1e-6))
+        out = torch.stack([log_stable, log_imp, log_wor], dim=-1)            # [B,29,14,3]
+        if return_contrib:
+            # exact per-concept direction contribution: contrib[b,r,d,c] = e * w_dir, sums to z
+            contrib = e.unsqueeze(2) * w_dir.unsqueeze(0).unsqueeze(0)        # [B,29,14,69]
+            return out, contrib
+        return out
+
+
 _HEADS = {"mlp": MLPHead, "linear": LinearHead, "kan": KANHead}
 
 

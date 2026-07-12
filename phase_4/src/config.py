@@ -16,6 +16,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]   # src/ -> phase_4/ -> repo roo
 # frozen-M3 region cache: <image_id>.npy float16 [29, feat_dim + 14] (feat ‖ disease logits)
 DEFAULT_REGION_CACHE = Path("/kaggle/input/m3-region-cache") if ON_KAGGLE \
     else (REPO_ROOT / "data" / "m3_region_cache")
+# frozen-M3 concept cache (ftcb arch): <image_id>.npy float16 [29, 69] sigmoid concept activations
+DEFAULT_CONCEPT_CACHE = Path("/kaggle/input/m3-concept-cache") if ON_KAGGLE \
+    else (REPO_ROOT / "data" / "m4_concept_cache")
 # per-region present mask lives in the m3 label arrays (present_mask.npy + manifest.jsonl)
 DEFAULT_M3_LABELS_DIR = Path("/kaggle/input/m3-labels") if ON_KAGGLE \
     else (REPO_ROOT / "data" / "m3_labels")
@@ -88,9 +91,10 @@ HEAD_MODE = "flat"
 INPUT_MODE = "full"
 
 # ---- loss --------------------------------------------------------------------
-LOSS_TYPE = "ce"                # "ce" (baseline) | "focal" — both honor USE_CLASS_WEIGHT
+LOSS_TYPE = "ce"                # "ce" (baseline) | "focal" | "cdw" — all honor USE_CLASS_WEIGHT
 FOCAL_GAMMA = 2.0
 LABEL_SMOOTHING = 0.0           # CE only; useful for noisy silver comparison_cues
+CDW_ALPHA = 5.0                 # "cdw" only: |i-c|^alpha ordinal distance penalty (Polat 2022/24)
 
 REQUIRE_PRIOR_PRESENT = True    # a region is supervised only if present in BOTH curr and prior
 

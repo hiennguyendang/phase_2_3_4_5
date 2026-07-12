@@ -56,6 +56,35 @@ class RegionCache:
         return feat.shape[1]
 
 
+class ConceptCache:
+    """Maps image_id -> <root>/<image_id>.npy  (float16 [29, 69], sigmoid M3 concept activations).
+
+    The FTCB (Faithful Temporal Concept Bottleneck) arch consumes this parallel cache; it is produced
+    alongside the region cache by phase_3/scripts/8-precompute_regions.py --concept-cache-out.
+    """
+
+    def __init__(self, root: Path):
+        self.root = Path(root)
+        self._index: dict[str, Path] | None = None
+
+    @property
+    def index(self) -> dict[str, Path]:
+        if self._index is None:
+            idx: dict[str, Path] = {}
+            for p in self.root.rglob("*.npy"):
+                idx.setdefault(p.stem, p)
+            if not idx:
+                raise FileNotFoundError(f"no '*.npy' concept caches under {self.root}")
+            self._index = idx
+        return self._index
+
+    def has(self, image_id: str) -> bool:
+        return image_id in self.index
+
+    def load(self, image_id: str) -> np.ndarray:
+        return np.load(self.index[image_id]).astype(np.float32)     # [29, 69]
+
+
 class PatchStore:
     """Maps image_id -> frozen M1 BioViL-T patch grid  [196, dim]  (.pt or .npy, [1+196,C] or [196,C]).
     The `tempfuse` arch reads these directly — no bridge/region-cache. Mirrors phase_3 FeatureStore."""
@@ -253,6 +282,28 @@ class M4Dataset(_M4Base):
                 "feat_prior": torch.from_numpy(fp), "logit_prior": torch.from_numpy(lp)}
 
 
+class M4ConceptDataset(_M4Base):
+    """ftcb arch — serves M3 concept activations [29,69] (concept cache) + M3 disease logits (region cache)."""
+
+    def __init__(self, concept_cache, region_cache, m3_labels_dir, m4_labels_dir, pairs_path,
+                 split: str | None = None, augment: bool = False, same_view_only: bool = False):
+        self.concepts = concept_cache if isinstance(concept_cache, ConceptCache) else ConceptCache(concept_cache)
+        self.rcache = region_cache if isinstance(region_cache, RegionCache) else RegionCache(region_cache)
+        super().__init__(m3_labels_dir, m4_labels_dir, pairs_path, split, augment,
+                         same_view_only, self._has)
+        self.feat_dim = self.rcache.detect_dim()   # unused by FTCB; kept for build_model uniformity
+
+    def _has(self, image_id: str) -> bool:
+        return self.concepts.has(image_id) and self.rcache.has(image_id)
+
+    def _item_tensors(self, a: str, b: str) -> dict:
+        _, lc = self.rcache.load(a)
+        _, lp = self.rcache.load(b)
+        return {"concept_curr": torch.from_numpy(self.concepts.load(a)),
+                "concept_prior": torch.from_numpy(self.concepts.load(b)),
+                "logit_curr": torch.from_numpy(lc), "logit_prior": torch.from_numpy(lp)}
+
+
 class M4PatchDataset(_M4Base):
     """tempfuse arch — serves frozen M1 patch grids (curr, prior) + the current image's boxes."""
 
@@ -307,10 +358,14 @@ def move_batch(batch: dict, device) -> dict:
 
 def make_dataset(arch, m3_labels_dir, m4_labels_dir, pairs, split, *, region_cache=None,
                  features_root=None, augment=False, same_view_only=False, box_source=config.BOX_SOURCE,
-                 tempfuse_input_mode=config.TEMPFUSE_INPUT_MODE):
-    """Build the dataset matching `arch` (regiondiff -> region cache; tempfuse -> M1 patch grids)."""
+                 tempfuse_input_mode=config.TEMPFUSE_INPUT_MODE, concept_cache=None):
+    """Build the dataset matching `arch` (regiondiff -> region cache; tempfuse -> M1 patch grids;
+    ftcb -> concept cache + region cache logits)."""
     if arch == "tempfuse":
         return M4PatchDataset(features_root, m3_labels_dir, m4_labels_dir, pairs, split,
                               augment, same_view_only, box_source, region_cache,
                               tempfuse_input_mode)
+    if arch == "ftcb":
+        return M4ConceptDataset(concept_cache, region_cache, m3_labels_dir, m4_labels_dir, pairs,
+                                split, augment, same_view_only)
     return M4Dataset(region_cache, m3_labels_dir, m4_labels_dir, pairs, split, augment, same_view_only)
