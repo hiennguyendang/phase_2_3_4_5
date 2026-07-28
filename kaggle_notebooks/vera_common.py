@@ -14,6 +14,9 @@ from pathlib import Path
 DRIVE_FOLDER_ID = "1a-a-P5i9lB8iN6t5wP5iNXsvZpDHdARp"
 KAGGLE_DATASET_ROOT = Path("/kaggle/input/datasets/nguynnghin")
 IMAGE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "mimic-cxr-448"
+# Backward-compatible path for already-uploaded notebooks. New notebooks call
+# find_image_root() so a differently nested Kaggle dataset is also supported.
+IMAGE_ROOT = IMAGE_DATASET_ROOT / "mimic-cxr-448"
 FEATURE_ROOT = KAGGLE_DATASET_ROOT / "frozen" / "frozen"
 BUNDLE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-inputs"
 M2_OUTPUT_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-detector-outputs"
