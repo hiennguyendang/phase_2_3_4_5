@@ -12,13 +12,16 @@ from pathlib import Path
 
 
 DRIVE_FOLDER_ID = "1a-a-P5i9lB8iN6t5wP5iNXsvZpDHdARp"
-IMAGE_ROOT = Path("/kaggle/input/datasets/nguynnghin/mimic-cxr-448")
-FEATURE_ROOT = Path("/kaggle/input/datasets/nguynnghin/frozen/frozen")
+KAGGLE_DATASET_ROOT = Path("/kaggle/input/datasets/nguynnghin")
+IMAGE_ROOT = KAGGLE_DATASET_ROOT / "mimic-cxr-448"
+FEATURE_ROOT = KAGGLE_DATASET_ROOT / "frozen" / "frozen"
+BUNDLE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-inputs"
+M2_OUTPUT_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-detector-outputs"
 
 
 def find_bundle() -> Path:
     """Find the uploaded vera_v2 bundle without hard-coding Kaggle's dataset slug."""
-    roots = [Path("/kaggle/input"), Path("/kaggle/working")]
+    roots = [KAGGLE_DATASET_ROOT, Path("/kaggle/working")]
     hits = []
     for root in roots:
         if not root.exists():
@@ -31,7 +34,7 @@ def find_bundle() -> Path:
             if (candidate / "m3_labels_base" / "manifest.jsonl").exists():
                 hits.append(candidate)
     if not hits:
-        dataset = Path("/kaggle/input/vera-v2-inputs")
+        dataset = BUNDLE_DATASET_ROOT
         archives = list(dataset.glob("*.zip")) if dataset.exists() else []
         if len(archives) == 1:
             extracted = Path("/kaggle/working/vera_v2_inputs_extracted")
@@ -49,8 +52,8 @@ def find_bundle() -> Path:
 
 def find_m2_outputs() -> Path:
     """Find the fresh detector-output Kaggle dataset by its provenance marker."""
-    root = Path("/kaggle/input")
-    preferred = root / "vera-v2-detector-outputs"
+    root = KAGGLE_DATASET_ROOT
+    preferred = M2_OUTPUT_DATASET_ROOT
     candidates = [preferred, preferred / "vera_v2_detector_outputs"]
     candidates += [p.parent.parent for p in root.glob("*/m3_labels_detector_v2/detector_provenance.json")]
     candidates += [p.parent.parent for p in root.glob("*/vera_v2_detector_outputs/m3_labels_detector_v2/detector_provenance.json")]

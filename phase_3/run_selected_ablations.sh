@@ -159,5 +159,6 @@ run_one() {
 }
 
 run_one m3_A detector --mode A
+run_one m3_global_only detector --mode A --global-only
 run_one m3_B detector --mode B --disease-head mlp
 run_one m3_B_linear detector --mode B --disease-head linear

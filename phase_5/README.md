@@ -13,15 +13,16 @@ m4_pred.jsonl ─┘        provenance per finding                       determi
 ## The six tiers (which are built vs pluggable)
 | tier | what | status here |
 |------|------|-------------|
-| 1 structured core | M3 region/image logits + M4 progression → assert/hedge/abstain/omit | **built** (`assemble.py`) |
-| 2 grounding "where" | lead region per disease + **α cells** in provenance + **29-region coverage map** | **built** |
-| 3 calibration + abstention | **per-class temperature** (`calibrate.py`) + τ bands → hedge / abstain | **built** (T=1 until fit) |
-| 4 temporal guard | no prior ⇒ NO temporal language *by construction*; else readout of M4 argmax | **built, structural** |
-| 5 realize | template (faithful default) **·** constrained paraphraser (LLM) | template built; LLM = interface |
+| 1 structured core | M3 region/image logits + M4 progression -> present/absent/unknown | **built** (`assemble.py`) |
+| 2 grounding "where" | all confident **(disease, region)** cells + **α cells** in provenance + **29-region coverage map** | **built** |
+| 3 calibration + abstention | **per-class temperature** (`calibrate.py`) + validation-fitted dual thresholds | **built** (provisional until artifacts are fit) |
+| 4 temporal guard | no prior ⇒ NO temporal language; calibrated M4 argmax must clear the confidence gate | **built, structural** |
+| 5 realize | template (faithful default) **·** constrained paraphraser (optional) | template built; paraphrase is off by default |
 | 6 verify | round-trip label re-extraction + coverage | **built** (hard-match; CheXbert = interface) |
 
-**Status bands (tier 1+3):** `assert` (p≥τ_assert) · `hedge` ("there may be…", p≥τ_uncertain) ·
-`abstain` ("…cannot be excluded", p≥τ_abstain, defer to radiologist) · `omit` (silent).
+Only `present` and `absent` are visible. The dual-threshold middle band is
+internal `unknown` and is omitted; the report never renders `possible`,
+`hedge`, or `abstain` states.
 
 ## Faithfulness, by construction
 - **Temporal guard:** a progression clause is emitted *only* when an M4 cell exists for the image.
@@ -33,7 +34,7 @@ m4_pred.jsonl ─┘        provenance per finding                       determi
 - **Paraphraser is prose-from-table** (`paraphrase.py`): may only rephrase listed findings; its output
   is re-verified and **falls back to the template** if it drifts. Default backend = None = template.
 - **Provenance:** every finding carries a pointer back to its source cells (`m3_image_prob`,
-  `m3_region_probs`, `m4`) — this is what feeds per-sentence provenance / coverage-map visualization.
+  `m3_region_probs`, `m3_concepts`, `m4`) — this is what feeds per-sentence provenance / coverage-map visualization.
 
 ## Files
 | File | Role |
@@ -51,15 +52,30 @@ m4_pred.jsonl ─┘        provenance per finding                       determi
 ```bash
 python phase_5/demo.py                               # synthetic, no data needed
 python phase_5/run.py --m3-pred data/m3_pred.jsonl \ # real M3/M4 predictions
-    --m4-pred data/m4_pred.jsonl --out data/m5_reports.jsonl
+    --m4-pred data/m4_pred.jsonl --thresholds data/m5_disease_thresholds.json \
+    --out data/m5_reports.jsonl
+# optional qualitative audit: append GT tables and one metadata report text
+python phase_5/run.py --m3-pred data/m3_pred.jsonl --m4-pred data/m4_pred.jsonl \
+    --thresholds data/m5_disease_thresholds.json \
+    --ground-truth-metadata data/mimic-metadata/mimic_metadata_final.jsonl \
+    --out data/m5_reports_with_gt.jsonl
 # omit --m4-pred entirely -> every report is single-image (no temporal language), guaranteed
 ```
 
 ## Output (one JSON line per image)
 ```
-{ image_id, prior_image_id, has_prior, normal,
-  findings: [ {disease, status, prob, lead_region, regions, temporal, text,
-               provenance:{m3_image_prob, m3_lead_region, m3_region_probs, m3_cells, m4}} ],
+{ image_id, prior_image_id, has_prior,
+  classification: {
+    image: {image_id, path, boxes:[{disease,region,state,bbox}]},
+    table: [{disease,region,state,evidence,confidence,bbox}],
+    text: "rule-based current text" },
+  progression: {
+    images: {prior:{image_id,path,boxes}, current:{image_id,path,boxes}},
+    table: [{disease,change,regions,lead_region,lead_bbox,confidence}],
+    text: "rule-based interval text" },
+  ground_truth: {
+    classification: {image,table}, progression:{images,table},
+    text: "exactly one metadata report" },
   coverage_map: {region: "abnormal"|"normal"|"not_assessable"},   # all 29
   text, verify: {ok, out_of_table, coverage_miss, temporal_halluc, spoken, extractor} }
 ```
@@ -69,6 +85,61 @@ python phase_5/run.py --m3-pred data/m3_pred.jsonl \ # real M3/M4 predictions
 python phase_5/calibrate.py --m3-pred data/m3_pred_val.jsonl --split val --out data/m5_temperature.json
 python phase_5/run.py --m3-pred ... --m4-pred ... --temperature data/m5_temperature.json --out ...
 ```
+
+Before report generation, export per-disease thresholds from a validation diagnostics file:
+
+```bash
+python phase_3/scripts/export_thresholds.py \
+  --diagnostics artifacts/diagnostics/m3_B_faithful_xwalk_v2.val.diagnostics.json \
+  --thresholds-json data/m5_disease_thresholds.json \
+  --concept-gate-json artifacts/calibration/m3_B_faithful_xwalk_v2.concept_gate.json \
+  --present-policy precision
+python phase_5/run.py --m3-pred data/m3_pred.jsonl --m4-pred data/m4_pred.jsonl \
+  --thresholds data/m5_disease_thresholds.json \
+  --concept-gate artifacts/calibration/m3_B_faithful_xwalk_v2.concept_gate.json \
+  --out data/m5_reports_with_absent.jsonl
+```
+
+Benchmark present thresholds maximize validation F1. Report-facing present
+thresholds additionally require validation PPV and specificity constraints;
+the absent threshold maximizes
+coverage subject to NPV >= 0.95 and at least 30 validation absent calls.
+The state is `present` above the positive threshold, `absent` below the negative threshold, and an
+internal unknown/abstain band between them. Unknown diseases are omitted from the report rather
+than rendered as a third class. The visible confidence is confidence in the reported state:
+calibrated `p(disease)` for present and `1-p(disease)` for absent. Thresholds remain in provenance.
+M3 inference must use `--all-region-diseases` so every confident `(disease, region)` cell can be
+retained. Absent region cells have no concepts, but their location is still available from the
+region head. Without a threshold artifact, the CLI stops by default. The fixed
+0.10/0.50 fallback is available only through `--allow-fixed-threshold-fallback`
+for smoke demos; final paper output must use validation-selected thresholds.
+Thresholds must come from validation; do not derive them from the test split.
+
+Temporal confidence is separately temperature-scaled per disease using M4
+validation readouts and regional-majority validation targets. A temporal row is
+rendered only when it clears its validation-fitted disease/change gate. The
+fixed `0.60` gate is only the explicit no-artifact fallback; `Support Devices`
+is excluded from progression.
+Classification evidence is intentionally model-derived: it is the predicted,
+graph-valid concept output for the disease-region cell, not text copied from the
+reference report.
+
+## Visual report preview
+
+Render self-contained HTML pages with embedded CXRs, bbox overlays, structured
+tables, rule-based text, and the separate ground-truth block:
+
+```bash
+python phase_5/render_report.py \
+  --reports data/demo/m5_reports.report_candidates_v2.gt.jsonl \
+  --out-dir data/demo/report_previews
+```
+
+The visible classification table uses up to two high-confidence regions per
+disease so a provisional uncalibrated report remains readable. The full table
+is preserved in an expandable audit block and in the source JSONL. Rows may be
+assigned the CSS classes `match`, `partial`, or `mismatch` for later qualitative
+comparison with ground truth. Print CSS is included for paper-oriented export.
 
 ## TODO when the externals arrive
 - swap `verify.extract_labels` → CheXbert/RadGraph (keep the same return type — NEVER an LLM).

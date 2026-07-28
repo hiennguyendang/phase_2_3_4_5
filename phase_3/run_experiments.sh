@@ -37,6 +37,7 @@ run () {                                    # run <name> <box-source> <train fla
 # ---- Tier 0/1: the 3 spec directions + mode-B disease-head variants (cfg is saved in each ckpt) ----
 run m3_B_faithful  detector  --mode B --disease-head faithful   # non-neg + masked -> intervention PASS
 run m3_A           detector  --mode A
+run m3_global_only detector  --mode A --global-only             # global-embedding-only image baseline
 run m3_B           detector  --mode B --disease-head mlp        # accuracy CBM (intervention FAILs)
 # run m3_B_linear    detector  --mode B --disease-head linear     # learned dense linear (no sign)
 run m3_B_nonneg    detector  --mode B --disease-head nonneg     # non-neg, no mask

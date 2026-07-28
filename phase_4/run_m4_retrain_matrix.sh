@@ -21,6 +21,8 @@ EVAL_SPLIT="${EVAL_SPLIT:-test}"
 FORCE="${FORCE:-0}"
 RUN_SUFFIX="${RUN_SUFFIX:-}"
 M4_MATRIX_SCOPE="${M4_MATRIX_SCOPE:-full}"
+M4_BOX_SOURCE="${M4_BOX_SOURCE:-gt}"
+RUN_MS_CXRT="${RUN_MS_CXRT:-0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,7 +67,10 @@ case "$PROFILE" in
     ;;
 esac
 
-if [[ "$M4_MATRIX_SCOPE" == "m3delta40" || "$M4_MATRIX_SCOPE" == "m3delta_refine" ]]; then
+if [[ "$M4_MATRIX_SCOPE" == "m3delta40" || "$M4_MATRIX_SCOPE" == "m3delta_refine" ||
+      "$M4_MATRIX_SCOPE" == "m3delta_kl_dist_refine" ||
+      "$M4_MATRIX_SCOPE" == "m3delta_smooth_dist_refine" ||
+      "$M4_MATRIX_SCOPE" == detector_* ]]; then
   EP="${M3DELTA40_EPOCHS:-40}"
 fi
 
@@ -97,7 +102,7 @@ MS_CSV="${MS_CSV:-data/MS_CXR_T_temporal_image_classification_v1.0.0.csv}"
 LOGDIR="${LOGDIR:-logs/m4_matrix}"
 DIAGDIR="${DIAGDIR:-artifacts/diagnostics}"
 PLOTDIR="${PLOTDIR:-artifacts/phase4_matrix}"
-COMMON="--select-metric change --patience $PAT"
+COMMON="--select-metric change --patience $PAT --box-source $M4_BOX_SOURCE"
 HYB="$COMMON --arch tempfuse --tempfuse-input-mode feat_logits"
 mkdir -p "$RUNS" "$LOGDIR" "$DIAGDIR" "$PLOTDIR"
 
@@ -121,6 +126,8 @@ echo "region_cache=$CACHE"
 echo "runs=$RUNS"
 echo "run_suffix=$RUN_SUFFIX"
 echo "matrix_scope=$M4_MATRIX_SCOPE"
+echo "box_source=$M4_BOX_SOURCE"
+echo "run_mscxrt=$RUN_MS_CXRT"
 
 echo
 echo "===== bridge: M3 region cache for regiondiff and tempfuse+M3-delta ====="
@@ -128,6 +135,7 @@ echo "===== bridge: M3 region cache for regiondiff and tempfuse+M3-delta ====="
   --ckpt "$M3_CKPT" \
   --labels-dir "$M3LAB" \
   --features-root "$FEAT" \
+  --box-source "$M4_BOX_SOURCE" \
   --out-dir "$CACHE" \
   --batch "$BATCH" \
   --workers "$W" \
@@ -151,6 +159,11 @@ eval_one() {
     ckfile="${entry#*:}"
     ck="$RUNS/$name/$ckfile"
     [[ -f "$ck" ]] || { echo "[skip eval] missing checkpoint $ck"; continue; }
+    actual_box=$("$PY" -c 'import sys, torch; c=torch.load(sys.argv[1], map_location="cpu", weights_only=False); print(c.get("box_source", "gt"))' "$ck")
+    if [[ "$actual_box" != "$M4_BOX_SOURCE" ]]; then
+      echo "[ERROR] checkpoint $ck has box_source=$actual_box; expected $M4_BOX_SOURCE" >&2
+      exit 2
+    fi
     suffix=""
     [[ "$variant" != "selected" ]] && suffix=".$variant"
     stem="$name$suffix"
@@ -175,7 +188,7 @@ eval_one() {
         2>&1 | tee -a "$LOGDIR/$stem.$EVAL_SPLIT.eval.log"
     fi
 
-    if [[ -f "$MS_CSV" ]]; then
+    if [[ "$RUN_MS_CXRT" == "1" && -f "$MS_CSV" ]]; then
       if [[ -s "$msdiag" && "$FORCE" != "1" ]]; then
         echo "[skip MS-CXR-T] $msdiag exists; set FORCE=1 or pass --force to rerun"
       else
@@ -372,21 +385,31 @@ run_m3delta40_matrix() {
 }
 
 run_m3delta_refine_matrix() {
-  # Focused sweep around the current smooth=0.05, distance=0.50 Pareto point.
-  # Start with the KL+distance external-robustness branch. The center KL=0.05, distance=0.50 run is
+  run_m3delta_kl_dist_refine_matrix
+  run_m3delta_smooth_dist_refine_matrix
+}
+
+run_m3delta_kl_dist_refine_matrix() {
+  # Focused sweep around the current KL=0.05, distance=0.50 candidate.
+  # The center KL=0.05, distance=0.50 run is
   # already complete, so this fills the other eight cells of the local 3x3 grid.
   EP="${M3DELTA40_EPOCHS:-40}"
   M3DREF="--select-metric change --patience 0 --arch tempfuse --tempfuse-input-mode feat_logits"
 
   # KL x distance local grid: run the four axis neighbors first, then the corners.
-  train_one m4v4_tf_m3delta40_kl005_dist035      $M3DREF --flip-consistency-weight 0.05  --distance-penalty-weight 0.35
-  train_one m4v4_tf_m3delta40_kl005_dist065      $M3DREF --flip-consistency-weight 0.05  --distance-penalty-weight 0.65
+  train_one m4v4_tf_m3delta40_kl005_dist035       $M3DREF --flip-consistency-weight 0.05  --distance-penalty-weight 0.35
+  train_one m4v4_tf_m3delta40_kl005_dist065       $M3DREF --flip-consistency-weight 0.05  --distance-penalty-weight 0.65
   train_one m4v4_tf_m3delta40_kl0025_dist050     $M3DREF --flip-consistency-weight 0.025 --distance-penalty-weight 0.50
   train_one m4v4_tf_m3delta40_kl0075_dist050     $M3DREF --flip-consistency-weight 0.075 --distance-penalty-weight 0.50
   train_one m4v4_tf_m3delta40_kl0025_dist035     $M3DREF --flip-consistency-weight 0.025 --distance-penalty-weight 0.35
   train_one m4v4_tf_m3delta40_kl0025_dist065     $M3DREF --flip-consistency-weight 0.025 --distance-penalty-weight 0.65
   train_one m4v4_tf_m3delta40_kl0075_dist035     $M3DREF --flip-consistency-weight 0.075 --distance-penalty-weight 0.35
   train_one m4v4_tf_m3delta40_kl0075_dist065     $M3DREF --flip-consistency-weight 0.075 --distance-penalty-weight 0.65
+}
+
+run_m3delta_smooth_dist_refine_matrix() {
+  EP="${M3DELTA40_EPOCHS:-40}"
+  M3DREF="--select-metric change --patience 0 --arch tempfuse --tempfuse-input-mode feat_logits"
 
   # Smoothing x distance local grid: run likely axis improvements first, then the corners.
   train_one m4v4_tf_m3delta40_smooth003_dist050  $M3DREF --label-smoothing 0.03 --distance-penalty-weight 0.50
@@ -400,6 +423,57 @@ run_m3delta_refine_matrix() {
 
   # One safety-heavy edge beyond the local grid; run last because dist=1.0 already over-predicted stable.
   train_one m4v4_tf_m3delta40_smooth005_dist075  $M3DREF --label-smoothing 0.05 --distance-penalty-weight 0.75
+}
+
+require_detector_scope() {
+  if [[ "$M4_BOX_SOURCE" != "detector" ]]; then
+    echo "[ERROR] $M4_MATRIX_SCOPE requires M4_BOX_SOURCE=detector" >&2
+    exit 2
+  fi
+}
+
+run_detector_kl_dist_matrix() {
+  require_detector_scope
+  EP="${M3DELTA40_EPOCHS:-40}"
+  local cfg="--select-metric change --patience 0 --box-source $M4_BOX_SOURCE --arch tempfuse --tempfuse-input-mode feat_logits"
+  local kl dist ktag dtag kentry dentry
+  local kls=("0.025:0025" "0.05:005" "0.075:0075")
+  local dists=("0.35:035" "0.50:050" "0.65:065")
+  for kentry in "${kls[@]}"; do
+    kl="${kentry%%:*}"
+    ktag="${kentry#*:}"
+    for dentry in "${dists[@]}"; do
+      dist="${dentry%%:*}"
+      dtag="${dentry#*:}"
+      train_one "m4v4_tf_m3delta40_kl${ktag}_dist${dtag}" $cfg \
+        --flip-consistency-weight "$kl" --distance-penalty-weight "$dist"
+    done
+  done
+}
+
+run_detector_appendix_matrix() {
+  require_detector_scope
+  EP="${M3DELTA40_EPOCHS:-40}"
+  local cfg="--select-metric change --patience 0 --box-source $M4_BOX_SOURCE --arch tempfuse --tempfuse-input-mode feat_logits"
+  train_one m4v4_tf_m3delta40_base                    $cfg
+  train_one m4v4_tf_m3delta40_kl005                   $cfg --flip-consistency-weight 0.05
+  train_one m4v4_tf_m3delta40_dist050                 $cfg --distance-penalty-weight 0.50
+  train_one m4v4_tf_m3delta40_kl005_dist050           $cfg --flip-consistency-weight 0.05 --distance-penalty-weight 0.50
+  train_one m4v4_tf_m3delta40_smooth005               $cfg --label-smoothing 0.05
+  train_one m4v4_tf_m3delta40_smooth005_kl005         $cfg --label-smoothing 0.05 --flip-consistency-weight 0.05
+  train_one m4v4_tf_m3delta40_smooth005_dist050       $cfg --label-smoothing 0.05 --distance-penalty-weight 0.50
+  train_one m4v4_tf_m3delta40_smooth005_kl005_dist050 $cfg --label-smoothing 0.05 --flip-consistency-weight 0.05 --distance-penalty-weight 0.50
+}
+
+run_detector_architecture_matrix() {
+  require_detector_scope
+  EP="${M3DELTA40_EPOCHS:-40}"
+  local cfg="--select-metric change --patience 0 --box-source $M4_BOX_SOURCE"
+  train_one m4arch_regiondiff40       $cfg --arch regiondiff --input-mode full
+  train_one m4arch_tempfuse40         $cfg --arch tempfuse --tempfuse-input-mode feat
+  train_one m4arch_m3delta_twostage40 $cfg --arch tempfuse --tempfuse-input-mode feat_logits --head-mode twostage
+  train_one m4arch_m3delta_2blocks40  $cfg --arch tempfuse --tempfuse-input-mode feat_logits --fuse-blocks 2
+  train_one m4arch_m3delta_sv2stage40 $cfg --arch tempfuse --tempfuse-input-mode feat_logits --same-view --head-mode twostage
 }
 
 run_broad_matrix() {
@@ -454,6 +528,32 @@ case "$M4_MATRIX_SCOPE" in
     run_m3delta_refine_matrix
     echo "[scope] M4_MATRIX_SCOPE=m3delta_refine; focused coefficient sweep complete"
     ;;
+  m3delta_kl_dist_refine)
+    run_m3delta_kl_dist_refine_matrix
+    echo "[scope] M4_MATRIX_SCOPE=m3delta_kl_dist_refine; KL x distance sweep complete"
+    ;;
+  m3delta_smooth_dist_refine)
+    run_m3delta_smooth_dist_refine_matrix
+    echo "[scope] M4_MATRIX_SCOPE=m3delta_smooth_dist_refine; smoothing x distance sweep complete"
+    ;;
+  detector_kl_dist)
+    run_detector_kl_dist_matrix
+    echo "[scope] detector KL x distance validation grid complete"
+    ;;
+  detector_appendix)
+    run_detector_appendix_matrix
+    echo "[scope] detector appendix regularization rows complete"
+    ;;
+  detector_architecture)
+    run_detector_architecture_matrix
+    echo "[scope] detector architecture ablations complete"
+    ;;
+  detector_paper)
+    run_detector_kl_dist_matrix
+    run_detector_appendix_matrix
+    run_detector_architecture_matrix
+    echo "[scope] complete detector paper queue finished"
+    ;;
   staged|safety)
     run_staged_matrix
     echo "[scope] M4_MATRIX_SCOPE=$M4_MATRIX_SCOPE; skipping broad controls/v4 matrix"
@@ -466,7 +566,7 @@ case "$M4_MATRIX_SCOPE" in
     run_broad_matrix
     ;;
   *)
-    echo "[ERROR] M4_MATRIX_SCOPE must be m3delta40, m3delta_refine, staged, safety, full, or broad (got '$M4_MATRIX_SCOPE')" >&2
+    echo "[ERROR] unknown M4_MATRIX_SCOPE=$M4_MATRIX_SCOPE (see detector_kl_dist, detector_appendix, detector_architecture, detector_paper)" >&2
     exit 2
     ;;
 esac

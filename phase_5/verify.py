@@ -17,8 +17,11 @@ import re
 import constants as C
 
 _NEG = ("no ", "without ", "not ", "negative for ")
-_TEMPORAL_MARKERS = ("compared to the prior", "improved", "worsened", "unchanged",
-                     "increased", "decreased", "interval")
+# Do not use bare words such as "increased": they also occur in predicted
+# concepts (e.g. "increased reticular markings") inside classification text.
+_TEMPORAL_MARKERS = ("compared to the prior", "improved compared", "worsened compared",
+                     "unchanged from the prior", "new ", " resolved since the prior",
+                     "interval change")
 
 
 def _search_terms(disease: str) -> list[str]:

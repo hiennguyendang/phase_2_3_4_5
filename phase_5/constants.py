@@ -26,6 +26,14 @@ CHEX_NAMES: list[str] = [_label_map[str(i)] for i in range(len(_label_map))]
 CHEX_INDEX: dict[str, int] = {c: i for i, c in enumerate(CHEX_NAMES)}
 NO_FINDING = "No Finding"
 
+_concept_space = json.loads(_find("m3_concept_space.json").read_text(encoding="utf-8"))
+CONCEPT_NAMES: list[str] = [concept["name"] for concept in _concept_space["concepts"]]
+CONCEPTS_BY_DISEASE: dict[str, set[str]] = {name: set() for name in CHEX_NAMES}
+for concept in _concept_space["concepts"]:
+    disease = concept.get("chexpert")
+    if disease in CONCEPTS_BY_DISEASE:
+        CONCEPTS_BY_DISEASE[disease].add(concept["name"])
+
 # 29 anatomical regions (for the coverage map; same order as phase_2/3/4)
 REGION_NAMES: list[str] = [
     "abdomen", "aortic arch", "cardiac silhouette", "carina", "cavoatrial junction",
@@ -38,6 +46,7 @@ REGION_NAMES: list[str] = [
 ]
 
 PROG_NAMES = ["stable", "improved", "worsened"]
+PROGRESSION_EXCLUDED = {"Support Devices", NO_FINDING}
 # how a progression class is realized in prose (stable is normally NOT spoken unless asserted change)
 PROG_PHRASE = {"improved": "improved", "worsened": "worsened", "stable": "unchanged"}
 

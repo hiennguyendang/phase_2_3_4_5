@@ -289,6 +289,16 @@ plot_args=(--out-dir "$PLOTDIR")
   2>&1 | tee -a "$LOGDIR/phase4_$TAG.plots.log"
 
 pick_ship_ckpt() {
+  local preferred_name="${SHIP_M4_NAME:-m4v4_tf_m3delta40_kl005_dist050${RUN_SUFFIX}}"
+  for ck in \
+    "$RUNS/$preferred_name/best_acc.pt" \
+    "$RUNS/$preferred_name/best.pt" \
+    "RUN/$preferred_name/best_acc.pt" \
+    "RUN/$preferred_name/best.pt"; do
+    if [[ -f "$ck" ]]; then
+      echo "$ck"; return 0
+    fi
+  done
   local candidates=(
     "${SHIP_M4_NAME:-}"
     "m4v4_tf_m3delta_kl005_2st${RUN_SUFFIX}"

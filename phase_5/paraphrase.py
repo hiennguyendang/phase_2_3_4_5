@@ -16,9 +16,9 @@ def build_prompt(report: dict, template_text: str) -> str:
     """A locked-down instruction: rephrase ONLY these findings, add nothing."""
     rows = []
     for f in report["findings"]:
-        loc = f["lead_region"] or "unspecified location"
+        loc = ", ".join(r["region"] for r in f.get("regions", [])) or "no confident region"
         tmp = f" [{f['temporal']['prog']} vs prior]" if f.get("temporal") else ""
-        rows.append(f"- {f['disease']} ({f['status']}, conf {f['prob']}) @ {loc}{tmp}")
+        rows.append(f"- {f['disease']} ({f['status']}, conf {f['confidence']}) @ {loc}{tmp}")
     table = "\n".join(rows) if rows else "- (no positive findings)"
     return (
         "Rewrite the following chest X-ray findings as a fluent radiology report. "

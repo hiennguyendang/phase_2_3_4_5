@@ -21,9 +21,11 @@ DEFAULT_OUT = (Path("/kaggle/working") if ON_KAGGLE else REPO_ROOT / "phase_5" /
 TAU_ASSERT = 0.50
 TAU_UNCERTAIN = 0.20   # hedge floor ("there may be ...")
 TAU_ABSTAIN = 0.10     # abstain floor ("X cannot be excluded"); below -> omit (silent)
-TAU_PROG = 0.50        # min M4 class prob to SPEAK a progression (else fall back to "stable"/silent)
+TAU_PROG = 0.60        # fallback min M4 class probability for any temporal row
 TEMPERATURE = 1.0      # global temperature (1.0 = identity); per-class from TEMPERATURE_PATH if present
 TEMPERATURE_PATH = REPO_ROOT / "data" / "m5_temperature.json"  # written by calibrate.py (optional)
+TEMPORAL_TEMPERATURE_PATH = REPO_ROOT / "data" / "m5_temporal_temperature.json"
+DISEASE_THRESHOLDS_PATH = REPO_ROOT / "data" / "m5_disease_thresholds.json"
 
 # ---- tier 2: grounding -------------------------------------------------------
 TAU_REGION = 0.50      # min per-region disease prob to name a location
@@ -34,4 +36,4 @@ GLOBAL_GROUNDING_DISEASES = {
 }
 
 # ---- tier 5: realization -----------------------------------------------------
-REALIZE = "template"   # "template" (faithful, default) | "paraphrase" (constrained LLM, pluggable)
+REALIZE = "template"   # "template" (faithful, default) | "paraphrase" (optional, pluggable)

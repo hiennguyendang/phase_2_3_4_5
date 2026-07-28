@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.tum.de)",
+      "WebFetch(domain:ut.ee)",
+      "WebFetch(domain:www.studyinjapan.go.jp)",
+      "WebFetch(domain:admissions.ntu.edu.tw)",
+      "WebFetch(domain:www.ugent.be)",
+      "WebFetch(domain:mbzuai.ac.ae)",
+      "WebFetch(domain:admissions.kaust.edu.sa)"
+    ]
+  }
+}
