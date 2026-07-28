@@ -48,11 +48,21 @@ RUNS="${RUNS:-data/run}"
 LOGDIR="${LOGDIR:-logs/m3_paper_v2}"
 DIAGDIR="${DIAGDIR:-artifacts/diagnostics/m3_paper_v2}"
 SYNC_REMOTE="${SYNC_REMOTE:-}"
+SYNC_DIAG_REMOTE="${SYNC_DIAG_REMOTE:-}"
 SYNC_EVERY="${SYNC_EVERY:-0}"
 mkdir -p "$RUNS" "$LOGDIR" "$DIAGDIR"
 
 require_file() { [[ -f "$1" ]] || { echo "[ERROR] missing file: $1" >&2; exit 2; }; }
 require_dir() { [[ -d "$1" ]] || { echo "[ERROR] missing directory: $1" >&2; exit 2; }; }
+sync_diagnostics() {
+  [[ -n "$SYNC_DIAG_REMOTE" ]] || return 0
+  if ! command -v rclone >/dev/null 2>&1; then
+    echo "[sync] rclone not on PATH; diagnostics remain local" >&2
+    return 0
+  fi
+  rclone copy "$DIAGDIR" "$SYNC_DIAG_REMOTE" --transfers 4 --quiet \
+    || echo "[sync] diagnostics push failed; the run remains resumable locally" >&2
+}
 
 for f in manifest.jsonl region_concepts.npy region_chexpert.npy image_chexpert.npy \
          boxes.npy present_mask.npy boxes_det.npy present_mask_det.npy; do
@@ -194,13 +204,15 @@ eval_one() {
         --min-region-pos 30 --min-region-neg 30 \
         2>&1 | tee "$LOGDIR/$name.$split.eval.log"
     fi
+    sync_diagnostics
     if [[ "${RUN_ARGS[$name]}" != *"--global-only"* ]]; then
       local report_dir="$DIAGDIR/$name.$split.regions"
       if [[ ! -s "$report_dir/regional_audit.md" || "$FORCE_EVAL" == "1" ]]; then
-        "$PY" phase_3/scripts/10-region-report.py \
+      "$PY" phase_3/scripts/10-region-report.py \
           --diagnostics "$diag" --out-dir "$report_dir" \
           2>&1 | tee "$LOGDIR/$name.$split.region-report.log"
       fi
+      sync_diagnostics
     fi
   done
   if [[ "${RUN_ARGS[$name]}" == *"--mode B"* ]]; then
@@ -209,6 +221,7 @@ eval_one() {
       --split test --batch "$BATCH" --workers "$EVAL_W" --device "$DEVICE" \
       --diagnostics-json "$DIAGDIR/$name.faithfulness.json" \
       2>&1 | tee "$LOGDIR/$name.faithfulness.log"
+    sync_diagnostics
   fi
 }
 
@@ -265,6 +278,7 @@ Path(sys.argv[1]).write_text(json.dumps({
 },indent=2),encoding="utf-8")
 PY
   echo "[calibration complete] $marker"
+  sync_diagnostics
 }
 
 echo "[M3 paper v2] profile=$PROFILE scope=$SCOPE epochs=$EP batch=$BATCH workers=$W"

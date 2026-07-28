@@ -322,7 +322,9 @@ Cells:
 5. The main launcher automatically regenerates stale validation dumps, fits
    pair-specific disease thresholds and concept gates, writes both CSV audits,
    and creates `m3v2_vera_graph_lse_det.calibration.SUCCESS.json` only on
-   completion. Save best.pt, last.pt, logs, metrics, diagnostics, predictions,
+   completion. Training checkpoints sync every epoch and completed diagnostics
+   sync after each split, so a dead session can resume without discarding prior
+   work. Save best.pt, last.pt, logs, metrics, diagnostics, predictions,
    regional audit, faithfulness JSON, the four calibration outputs, and marker.
 6. Resume with --scope all to obtain the eight remaining retained rows. If a
    Kaggle session is too short, expose a RUN_SCOPE/RUN_INDEX setting so one or
