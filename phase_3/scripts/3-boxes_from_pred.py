@@ -75,7 +75,12 @@ def main() -> int:
     res = float(args.input_res)
 
     manifest = [json.loads(l) for l in open(args.manifest, encoding="utf-8")]
-    row_of: dict[str, int] = {m["image_id"]: i for i, m in enumerate(manifest)}
+    # The authoritative manifest contains some duplicate image_id rows.  Keep
+    # every row so one detector prediction is copied to all matching labels;
+    # mapping image_id to only the last row silently leaves earlier rows empty.
+    rows_of: dict[str, list[int]] = {}
+    for i, m in enumerate(manifest):
+        rows_of.setdefault(str(m["image_id"]), []).append(i)
     n = len(manifest)
     print(f"manifest rows: {n:,}")
 
@@ -83,12 +88,20 @@ def main() -> int:
     present = np.zeros((n, C.NUM_REGIONS), dtype=np.uint8)
 
     seen = matched = n_boxes = 0
+    matched_rows: set[int] = set()
+    seen_ids: set[str] = set()
+    duplicate_predictions = 0
     for rec in iter_predictions(args.pred):
         seen += 1
-        i = row_of.get(str(rec.get("image_id", "")))
-        if i is None:                       # a prediction for an image not in the manifest
+        image_id = str(rec.get("image_id", ""))
+        row_ids = rows_of.get(image_id)
+        if row_ids is None:                 # a prediction for an image not in the manifest
             continue
         matched += 1
+        if image_id in seen_ids:
+            duplicate_predictions += 1
+        seen_ids.add(image_id)
+        matched_rows.update(row_ids)
         for o in rec.get("objects", []) or []:
             ri = C.REGION_INDEX.get(o.get("bbox_name"))
             if ri is None:
@@ -102,9 +115,10 @@ def main() -> int:
             y1, y2 = sorted((max(0.0, min(res, y1)), max(0.0, min(res, y2))))
             if x2 - x1 < 1.0 or y2 - y1 < 1.0:
                 continue
-            boxes[i, ri] = (round(x1), round(y1), round(x2), round(y2))
-            present[i, ri] = 1
-            n_boxes += 1
+            for i in row_ids:
+                boxes[i, ri] = (round(x1), round(y1), round(x2), round(y2))
+                present[i, ri] = 1
+            n_boxes += len(row_ids)
         if seen % 20000 == 0:
             print(f"  ...{seen:,} predictions read")
 
@@ -113,7 +127,9 @@ def main() -> int:
 
     covered = int((present.sum(axis=1) > 0).sum())
     print("\n=== DONE ===")
-    print(f"predictions read     : {seen:,}  (matched to manifest: {matched:,})")
+    print(f"predictions read     : {seen:,}  (matched image IDs: {matched:,}; manifest rows matched: {len(matched_rows):,})")
+    if duplicate_predictions:
+        print(f"[warning] duplicate prediction image IDs: {duplicate_predictions:,}")
     print(f"manifest rows w/ box : {covered:,}/{n:,}  ({100*covered/max(1,n):.1f}%)")
     print(f"avg regions/image    : {present.sum()/max(1,covered):.1f}  (total boxes {n_boxes:,})")
     print(f"boxes_det.npy + present_mask_det.npy -> {args.out_dir}")

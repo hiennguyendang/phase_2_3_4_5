@@ -61,6 +61,10 @@ NECK_DIM = None
 # Catches relational findings (cardiomegaly, diffuse edema, low lung volumes) not in one box.
 USE_GLOBAL_HEAD = True
 
+# global-only ablation: use only the BioViL-T global embedding for image-level disease prediction.
+# Region/concept outputs are skipped in this baseline.
+GLOBAL_ONLY = False
+
 # head direction (spec 3.3 letters — A=safe fallback, C=most dangerous for faithfulness):
 #   "A" Direct:   region_feat -> 14                       (faithful "where", accuracy ceiling)
 #   "B" CBM:      region_feat -> 69 concept -> 14         (pure bottleneck, the only "why"-faithful path)
@@ -74,12 +78,16 @@ KAN_GRIDS = 8                   # (HEAD_TYPE="kan" only) spline resolution: # of
 # its mapped concepts) -> raising a concept can only raise its disease => intervention PASSES by
 # construction, at a small accuracy cost. "linear"/"nonneg" are the in-between ablations.
 DISEASE_HEAD = "mlp"            # "mlp" | "linear" | "nonneg" | "faithful"
+DETACH_CONCEPT_FOR_DISEASE = False # v2 main enables this explicitly; false preserves old checkpoints
+FAITHFUL_EDGE_INIT = 0.02          # effective positive edge weight after softplus
+FAITHFUL_BIAS_INIT = -2.0          # overwritten from train prevalence when available
+DERIVE_NO_FINDING = False          # v2 main enables this explicitly; false preserves old checkpoints
 CONCEPT_DROPOUT = 0.1
 FEATURE_LEAK_DROPOUT = 0.3      # (C/Hybrid only) dropout on the raw-feature path into the disease
                                 # head, so disease leans on concepts -> "leaky CBM"
 
 # how to get the image-level 14 from the 29 region predictions
-REGION_AGG = "attention"        # "attention" | "max" | "mean"
+REGION_AGG = "attention"        # "lse" | "attention" | "max" | "mean"
 
 # ---- imbalance (spec 3.6, top priority) --------------------------------------
 USE_POS_WEIGHT = True           # RADAR-style log-scale pos_weight  α_i = log(1 + |D|/pos_i)
@@ -111,9 +119,10 @@ def env_path(name: str, default: Path) -> Path:
 
 # ---- architecture snapshot (so a checkpoint records exactly which toggles built it, and
 # eval/faithfulness/infer can rebuild the SAME model even for ablation runs) ----------------
-_ARCH_KEYS = ("NECK_DIM", "MASK_BBOX", "REGION_AGG", "USE_GLOBAL_HEAD", "USE_GLOBAL_TOKEN",
-              "POOL_HEADS", "HEAD_TYPE", "HEAD_HIDDEN", "KAN_GRIDS", "CONCEPT_DROPOUT",
-              "FEATURE_LEAK_DROPOUT", "DISEASE_HEAD")
+_ARCH_KEYS = ("NECK_DIM", "MASK_BBOX", "REGION_AGG", "USE_GLOBAL_HEAD", "GLOBAL_ONLY",
+              "USE_GLOBAL_TOKEN", "POOL_HEADS", "HEAD_TYPE", "HEAD_HIDDEN", "KAN_GRIDS", "CONCEPT_DROPOUT",
+              "FEATURE_LEAK_DROPOUT", "DISEASE_HEAD", "DETACH_CONCEPT_FOR_DISEASE",
+              "FAITHFUL_EDGE_INIT", "FAITHFUL_BIAS_INIT", "DERIVE_NO_FINDING")
 
 
 def snapshot() -> dict:

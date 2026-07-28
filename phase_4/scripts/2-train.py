@@ -13,8 +13,10 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "src"))  # phase_4/src
 
 import argparse
+import random
 from pathlib import Path
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
@@ -85,6 +87,7 @@ def parse_args() -> argparse.Namespace:
                    help="supervise cells present in CURRENT only (default: require prior present too)")
     p.add_argument("--no-augment", action="store_true", help="disable train-time time-flip augmentation")
     p.add_argument("--workers", type=int, default=2)
+    p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", default="cuda")
     p.add_argument("--resume", action="store_true")
     p.add_argument("--sync-remote", default=None, help="rclone remote, e.g. dhint:CHEX-DATA/m4_runs")
@@ -128,6 +131,10 @@ def _make_flipped_batch(batch: dict) -> dict:
 def main() -> int:
     import model as M
     args = parse_args()
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     # config toggles read globally downstream (heads defaults, dataset masking) — set before use.
     config.ARCH = args.arch
     config.HEAD_TYPE = args.head_type
@@ -207,6 +214,7 @@ def main() -> int:
             "distance_penalty_weight": args.distance_penalty_weight,
             "flip_consistency_weight": args.flip_consistency_weight,
             "flip_consistency_temperature": args.flip_consistency_temperature,
+            "seed": args.seed,
             "require_prior_present": config.REQUIRE_PRIOR_PRESENT,
             "curriculum_same_view_epochs": args.curriculum_same_view_epochs}
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=config.WEIGHT_DECAY)

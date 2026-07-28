@@ -9,9 +9,10 @@ Pipeline: pool 196->29 (bbox-masked) -> neck (OFF by default -> keep 512) -> hea
 Image-level 14 = region-aggregate fused with a GlobalHead via a learned per-disease gate (spec 3.5).
 
 Outputs per forward:
-  concept_logits        [B, 29, 69]   per-region concept (None for mode A)
-  region_disease_logits [B, 29, 14]   per-region CheXpert
-  image_disease_logits  [B, 14]       image-level CheXpert (region<->global gate fusion)
+  concept_logits        [B, 29, 69]   per-region concept (None for mode A or global-only)
+  region_disease_logits [B, 29, 14]   per-region CheXpert (None for global-only)
+  image_disease_logits  [B, 14]       image-level CheXpert (region<->global gate fusion,
+                                     or global-only head for the baseline)
   region_feats          [B, 29, 512]  region features (128 if NECK_DIM set)  (M4 hook)
   region_attn           [B, 29, 196]  attention-pool weights      (M5 grounding "where")
 """
@@ -31,6 +32,11 @@ class CKAN(nn.Module):
     def __init__(self, feat_dim: int, mode: str = config.HEAD_MODE):
         super().__init__()
         self.mode = mode
+        self.global_only = config.GLOBAL_ONLY
+        if self.global_only:
+            self.global_head_only = make_head(feat_dim, C.NUM_CHEX)
+            return
+
         self.pool = RegionAttentionPool(feat_dim)
 
         # neck 512 -> 128 (spec 3.2): compact, normalized region feature shared with M4
@@ -67,7 +73,21 @@ class CKAN(nn.Module):
 
     def forward(self, grid: torch.Tensor, global_vec: torch.Tensor | None = None,
                 present_mask: torch.Tensor | None = None,
-                boxes: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
+                boxes: torch.Tensor | None = None) -> dict[str, torch.Tensor | None]:
+        if self.global_only:
+            if global_vec is None:
+                raise ValueError("global-only M3 expects a global feature vector")
+            image_disease = self.global_head_only(global_vec)
+            if config.DERIVE_NO_FINDING:
+                image_disease = self._derive_no_finding(image_disease)
+            return {
+                "concept_logits": None,
+                "region_disease_logits": None,
+                "image_disease_logits": image_disease,
+                "region_feats": None,
+                "region_attn": None,
+            }
+
         pooled, alpha = self.pool(grid, global_vec, boxes)   # [B,R,C], [B,29,196]
         feats29 = self.neck(pooled[:, :C.NUM_REGIONS, :])    # [B,29,rdim]  supervised slots
 
@@ -77,7 +97,10 @@ class CKAN(nn.Module):
         else:
             concept_logits = self.concept_head(feats29)      # [B,29,69]
             if self.mode == "B":
-                region_disease = self.disease_head(torch.sigmoid(concept_logits))
+                concept_prob = torch.sigmoid(concept_logits)
+                if config.DETACH_CONCEPT_FOR_DISEASE:
+                    concept_prob = concept_prob.detach()
+                region_disease = self.disease_head(concept_prob)
             else:  # C / hybrid
                 feat_in = self.feat_leak(feats29)
                 region_disease = self.disease_head(
@@ -90,6 +113,9 @@ class CKAN(nn.Module):
             image_disease = g * image_global + (1.0 - g) * image_local
         else:
             image_disease = image_local
+
+        if config.DERIVE_NO_FINDING:
+            image_disease = self._derive_no_finding(image_disease)
 
         return {
             "concept_logits": concept_logits,                # [B,29,69] or None
@@ -112,12 +138,27 @@ class CKAN(nn.Module):
         if self.region_agg == "mean":
             w = m.float().unsqueeze(-1)
             return (region_disease * w).sum(1) / w.sum(1).clamp_min(1.0)
+        if self.region_agg == "lse":
+            masked = region_disease.masked_fill(~m.unsqueeze(-1), float("-inf"))
+            count = m.sum(dim=1).clamp_min(1).to(region_disease.dtype).log().unsqueeze(-1)
+            out = torch.logsumexp(masked, dim=1) - count
+            return torch.nan_to_num(out, neginf=0.0)
         # attention (default): learn a weight per present region, share across diseases
         score = self.agg_score(feats).squeeze(-1)            # [B,R]
         score = score.masked_fill(~m, float("-inf"))
         w = torch.softmax(score, dim=1).unsqueeze(-1)        # [B,R,1]
         w = torch.nan_to_num(w)                              # rows with no present region -> 0
         return (w * region_disease).sum(dim=1)               # [B,14]
+
+    @staticmethod
+    def _derive_no_finding(image_disease: torch.Tensor) -> torch.Tensor:
+        """Derive No Finding from the joint absence of the other CheXpert labels."""
+        keep = [i for i in range(C.NUM_CHEX) if i != C.NO_FINDING_IDX]
+        p_absent = (1.0 - torch.sigmoid(image_disease[:, keep])).clamp_min(1e-6)
+        p_no_finding = p_absent.prod(dim=1).clamp(1e-6, 1.0 - 1e-6)
+        out = image_disease.clone()
+        out[:, C.NO_FINDING_IDX] = torch.logit(p_no_finding)
+        return out
 
 
 def build_model(feat_dim: int, mode: str = config.HEAD_MODE) -> CKAN:

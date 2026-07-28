@@ -24,6 +24,7 @@ class M3Dataset(Dataset):
         self.rc = np.load(labels_dir / "region_concepts.npy", mmap_mode="r")
         self.rx = np.load(labels_dir / "region_chexpert.npy", mmap_mode="r")
         self.ic = np.load(labels_dir / "image_chexpert.npy", mmap_mode="r")
+        self.pm_gt = np.load(labels_dir / "present_mask.npy", mmap_mode="r")
 
         # bbox source: "detector" (YOLO, default — same source train & launch) | "gt" (silver oracle)
         src = (box_source or config.BOX_SOURCE).lower()
@@ -69,6 +70,7 @@ class M3Dataset(Dataset):
             "region_chexpert": torch.from_numpy(self.rx[i].astype(np.int64)),   # [29,14]
             "image_chexpert": torch.from_numpy(self.ic[i].astype(np.int64)),    # [14]
             "present_mask": torch.from_numpy(self.pm[i].astype(np.float32)),    # [29]
+            "gt_present_mask": torch.from_numpy(self.pm_gt[i].astype(np.float32)), # [29]
             "boxes": torch.from_numpy(self.bx[i].astype(np.int64)),             # [29,4]
         }
 
@@ -76,6 +78,6 @@ class M3Dataset(Dataset):
 def collate(batch: list[dict]) -> dict:
     out = {"image_id": [b["image_id"] for b in batch]}
     for k in ("grid", "global", "region_concepts", "region_chexpert",
-              "image_chexpert", "present_mask", "boxes"):
+              "image_chexpert", "present_mask", "gt_present_mask", "boxes"):
         out[k] = torch.stack([b[k] for b in batch])
     return out

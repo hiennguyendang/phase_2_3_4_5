@@ -29,7 +29,7 @@ def build_from_ckpt(ck: dict, device):
                       ck.get("hidden", config.HEAD_HIDDEN), ck.get("dropout", config.HEAD_DROPOUT),
                       ck.get("head_mode", "flat"), ck.get("arch", "regiondiff"),
                       ck.get("fuse_blocks", config.FUSE_BLOCKS),
-                      ck.get("tempfuse_input_mode", "feat"))
+                      ck.get("tempfuse_input_mode") or "feat")
     m.load_state_dict(ck["model"])
     return m.to(device)
 
@@ -41,7 +41,7 @@ def dataset_from_ckpt(ck: dict, m3_labels_dir, m4_labels_dir, pairs, split, *,
                         region_cache=region_cache, features_root=features_root,
                         same_view_only=ck.get("same_view", False),
                         box_source=ck.get("box_source", config.BOX_SOURCE),
-                        tempfuse_input_mode=ck.get("tempfuse_input_mode", "feat"))
+                        tempfuse_input_mode=ck.get("tempfuse_input_mode") or "feat")
 
 
 def _safe_nanmean(values) -> float:

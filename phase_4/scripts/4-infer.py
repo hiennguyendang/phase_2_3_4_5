@@ -37,7 +37,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--split", default="test")
     p.add_argument("--out", type=Path, default=config.WORK_ROOT / "m4_pred.jsonl")
     p.add_argument("--include-stable", action="store_true")
+    p.add_argument("--image-id", action="append", default=None,
+                   help="restrict inference to one or more current image IDs (repeatable; useful for a demo)")
     p.add_argument("--batch", type=int, default=config.BATCH)
+    p.add_argument("--workers", type=int, default=0)
     p.add_argument("--device", default="cuda")
     return p.parse_args()
 
@@ -51,7 +54,15 @@ def main() -> int:
 
     ds = dataset_from_ckpt(ck, args.m3_labels_dir, args.m4_labels_dir, args.pairs, args.split,
                            region_cache=args.region_cache, features_root=args.features_root)
-    loader = DataLoader(ds, batch_size=args.batch, collate_fn=collate)
+    if args.image_id:
+        wanted = set(args.image_id)
+        ds.rows = [row for row in ds.rows if row[1] in wanted]
+        if not ds.rows:
+            raise SystemExit("[ERROR] none of --image-id values matched the requested split/cache")
+    loader_kwargs = {"batch_size": args.batch, "collate_fn": collate, "num_workers": args.workers}
+    if args.workers > 0:
+        loader_kwargs.update({"persistent_workers": True, "prefetch_factor": 2})
+    loader = DataLoader(ds, **loader_kwargs)
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     written = 0
@@ -62,7 +73,31 @@ def main() -> int:
             pred = probs.argmax(-1)
             mask = b["region_mask"]
             for j in range(len(b["image_id"])):
-                rec = {"image_id": b["image_id"][j], "prior_image_id": b["prior_image_id"][j], "regions": {}}
+                rec = {
+                    "image_id": b["image_id"][j],
+                    "prior_image_id": b["prior_image_id"][j],
+                    "regions": {},
+                    "diseases": {},
+                    "aggregation": "logsumexp_region_logits",
+                }
+                valid_regions = torch.nonzero(mask[j] >= 0.5, as_tuple=False).flatten()
+                if valid_regions.numel() == 0:
+                    continue
+                for d in range(C.NUM_CHEX):
+                    disease_logits = logits[j, valid_regions, d, :].detach().cpu()
+                    pooled_logits = torch.logsumexp(disease_logits, dim=0)
+                    pooled_probs = F.softmax(pooled_logits, dim=-1)
+                    cls = int(pooled_probs.argmax())
+                    lead_region = None
+                    if cls != 0:
+                        lead_local = int(disease_logits[:, cls].argmax())
+                        lead_region = C.REGION_NAMES[int(valid_regions[lead_local])]
+                    rec["diseases"][C.CHEX_NAMES[d]] = {
+                        "change": C.PROG_NAMES[cls],
+                        "confidence": round(float(pooled_probs[cls]), 4),
+                        "probs": [round(float(x), 4) for x in pooled_probs],
+                        "lead_region": lead_region,
+                    }
                 for r in range(C.NUM_REGIONS):
                     if mask[j, r] < 0.5:
                         continue

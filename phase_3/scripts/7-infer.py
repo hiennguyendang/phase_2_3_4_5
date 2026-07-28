@@ -37,10 +37,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--topk-concepts", type=int, default=8)
     p.add_argument("--topk-cells", type=int, default=0,
                    help="dump top-k attention-pool grid cells per region (M5 'where'); 0 = off")
+    p.add_argument("--all-region-diseases", action="store_true",
+                   help="dump all 29x14 region-disease probabilities for dual-threshold readout")
     p.add_argument("--batch", type=int, default=config.BATCH)
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
                    help="bbox source: detector (default) or gt (oracle ablation)")
+    p.add_argument("--image-id", action="append", default=None,
+                   help="restrict inference to one or more image IDs (repeatable; useful for a demo)")
     p.add_argument("--device", default="cuda")
     return p.parse_args()
 
@@ -56,6 +60,11 @@ def main() -> int:
     m.load_state_dict(ck["model"])
 
     ds = M3Dataset(args.labels_dir, args.features_root, args.split, box_source=args.box_source)
+    if args.image_id:
+        wanted = set(args.image_id)
+        ds.rows = [row for row in ds.rows if row[1] in wanted]
+        if not ds.rows:
+            raise SystemExit("[ERROR] none of --image-id values matched the requested split/features")
     loader = DataLoader(ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -65,31 +74,52 @@ def main() -> int:
             out = m(b["grid"].to(args.device), b["global"].to(args.device),
                     b["present_mask"].to(args.device), b["boxes"].to(args.device))
             img = torch.sigmoid(out["image_disease_logits"]).cpu()
-            rd = torch.sigmoid(out["region_disease_logits"]).cpu()
+            rd = None if out.get("region_disease_logits") is None else torch.sigmoid(out["region_disease_logits"]).cpu()
             cc = (torch.sigmoid(out["concept_logits"]).cpu()
-                  if out["concept_logits"] is not None else None)
-            attn = out["region_attn"].cpu() if args.topk_cells else None  # [B,29,196]
+                  if out.get("concept_logits") is not None else None)
+            attn = out.get("region_attn").cpu() if args.topk_cells and out.get("region_attn") is not None else None
             mask = b["present_mask"]
             for j, iid in enumerate(b["image_id"]):
                 rec = {
                     "image_id": iid,
+                    "box_source": args.box_source,
                     "image_disease": {C.CHEX_NAMES[c]: round(float(img[j, c]), 4) for c in range(C.NUM_CHEX)},
                     "regions": {},
                 }
-                for r in range(C.NUM_REGIONS):
-                    if mask[j, r] < 0.5:
-                        continue
-                    entry = {"disease": {C.CHEX_NAMES[c]: round(float(rd[j, r, c]), 3)
-                                         for c in range(C.NUM_CHEX) if rd[j, r, c] > 0.5}}
-                    if cc is not None:
-                        top = torch.topk(cc[j, r], args.topk_concepts)
-                        entry["concepts"] = {C.CONCEPT_NAMES[int(i)]: round(float(p), 3)
-                                             for p, i in zip(top.values, top.indices) if p > 0.5}
-                    if attn is not None:                 # faithful "where" cells -> (row, col, weight)
-                        tc = torch.topk(attn[j, r], args.topk_cells)
-                        entry["cells"] = [[int(i) // config.GRID_W, int(i) % config.GRID_W, round(float(w), 3)]
-                                          for w, i in zip(tc.values, tc.indices)]
-                    rec["regions"][C.REGION_NAMES[r]] = entry
+                if rd is not None:
+                    for r in range(C.NUM_REGIONS):
+                        if mask[j, r] < 0.5:
+                            continue
+                        entry = {
+                            "bbox": [int(x) for x in b["boxes"][j, r].tolist()],
+                            "disease": {C.CHEX_NAMES[c]: round(float(rd[j, r, c]), 3)
+                                        for c in range(C.NUM_CHEX)
+                                        if args.all_region_diseases or rd[j, r, c] > 0.5},
+                        }
+                        if cc is not None:
+                            top = torch.topk(cc[j, r], args.topk_concepts)
+                            entry["concepts"] = {C.CONCEPT_NAMES[int(i)]: round(float(p), 3)
+                                                 for p, i in zip(top.values, top.indices) if p > 0.5}
+                            disease_concepts = {}
+                            for disease_idx, concept_ids in C.CHEX_FROM_CONCEPTS.items():
+                                if not concept_ids:
+                                    continue
+                                values = cc[j, r, concept_ids]
+                                count = min(args.topk_concepts, len(concept_ids))
+                                selected = torch.topk(values, count)
+                                evidence = {
+                                    C.CONCEPT_NAMES[concept_ids[int(i)]]: round(float(p), 3)
+                                    for p, i in zip(selected.values, selected.indices)
+                                    if p > 0.5
+                                }
+                                if evidence:
+                                    disease_concepts[C.CHEX_NAMES[disease_idx]] = evidence
+                            entry["disease_concepts"] = disease_concepts
+                        if attn is not None:                 # faithful "where" cells -> (row, col, weight)
+                            tc = torch.topk(attn[j, r], args.topk_cells)
+                            entry["cells"] = [[int(i) // config.GRID_W, int(i) % config.GRID_W, round(float(w), 3)]
+                                              for w, i in zip(tc.values, tc.indices)]
+                        rec["regions"][C.REGION_NAMES[r]] = entry
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 written += 1
     print(f"[DONE] {written:,} predictions -> {args.out}")

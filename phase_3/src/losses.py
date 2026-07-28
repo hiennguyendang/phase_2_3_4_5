@@ -49,14 +49,19 @@ def compute_losses(out: dict, batch: dict, pos_weight: dict | None = None) -> tu
     present = batch["present_mask"]                                  # [B,29]
     li = masked_bce(out["image_disease_logits"], batch["image_chexpert"],
                     pos_weight=pw.get("image"))
-    lr = masked_bce(out["region_disease_logits"], batch["region_chexpert"],
-                    extra_mask=present.unsqueeze(-1), pos_weight=pw.get("region"))
+    lr = torch.zeros((), device=li.device)
+    if out.get("region_disease_logits") is not None and not config.GLOBAL_ONLY:
+        lr = masked_bce(out["region_disease_logits"], batch["region_chexpert"],
+                        extra_mask=present.unsqueeze(-1), pos_weight=pw.get("region"))
     lc = torch.zeros((), device=li.device)
-    if out["concept_logits"] is not None:
+    if out.get("concept_logits") is not None and not config.GLOBAL_ONLY:
         lc = masked_bce(out["concept_logits"], batch["region_concepts"],
                         extra_mask=present.unsqueeze(-1), pos_weight=pw.get("concept"))
-    total = (config.LAMBDA_CONCEPT * lc
-             + config.LAMBDA_REGION_CHEX * lr
-             + config.LAMBDA_IMAGE_CHEX * li)
+    if config.GLOBAL_ONLY:
+        total = config.LAMBDA_IMAGE_CHEX * li
+    else:
+        total = (config.LAMBDA_CONCEPT * lc
+                 + config.LAMBDA_REGION_CHEX * lr
+                 + config.LAMBDA_IMAGE_CHEX * li)
     return total, {"total": float(total), "concept": float(lc),
                    "region_chex": float(lr), "image_chex": float(li)}

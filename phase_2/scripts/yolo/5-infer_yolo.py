@@ -41,6 +41,10 @@ def parse_args() -> argparse.Namespace:
                         "(use for the full ~220k MIMIC run to avoid a flood of tiny files; "
                         "implies --jsonl)")
     p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--shard-index", type=int, default=0,
+                   help="zero-based shard index for deterministic multi-GPU inference")
+    p.add_argument("--num-shards", type=int, default=1,
+                   help="number of deterministic shards; use 1 for the normal single-process run")
     return p.parse_args()
 
 
@@ -55,11 +59,15 @@ def main() -> int:
     from ultralytics import YOLO
 
     images = list_images(args.source)
+    if args.num_shards < 1 or not 0 <= args.shard_index < args.num_shards:
+        raise SystemExit("[ERROR] require 0 <= shard-index < num-shards and num-shards >= 1")
+    if args.num_shards > 1:
+        images = images[args.shard_index::args.num_shards]
     if args.limit is not None:
         images = images[: args.limit]
     if not images:
         raise SystemExit(f"[ERROR] no images under {args.source}")
-    print(f"Running on {len(images):,} images")
+    print(f"Running on {len(images):,} images (shard {args.shard_index + 1}/{args.num_shards})")
 
     args.out.mkdir(parents=True, exist_ok=True)
     model = YOLO(str(args.weights))
@@ -69,6 +77,7 @@ def main() -> int:
         combined = open(args.out / "predictions.jsonl", "w", encoding="utf-8")
 
     n = 0
+    last_report = 0
     for start in range(0, len(images), args.batch):
         batch = images[start: start + args.batch]
         results = model.predict(
@@ -103,8 +112,9 @@ def main() -> int:
             if combined is not None:
                 combined.write(json.dumps(record) + "\n")
             n += 1
-        if n % 500 == 0 or start + args.batch >= len(images):
+        if n - last_report >= 500 or start + args.batch >= len(images):
             print(f"  ...{n:,}/{len(images):,}")
+            last_report = n
 
     if combined is not None:
         combined.close()

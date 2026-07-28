@@ -154,6 +154,17 @@ def main() -> int:
     print(f"[faithfulness] mode={mode} split={args.split} n={len(ds):,}\n")
     diag = {"mode": mode, "split": args.split, "n": len(ds)}
 
+    if mode == "A" and getattr(config, "GLOBAL_ONLY", False):
+        print("Global-only baseline: no region or concept channel -> no where/why faithfulness claim.")
+        diag["why_faithful_allowed"] = False
+        diag["where_faithful_allowed"] = False
+        diag["note"] = "Global-only baseline has no region or concept channel."
+        if args.diagnostics_json:
+            args.diagnostics_json.parent.mkdir(parents=True, exist_ok=True)
+            args.diagnostics_json.write_text(json.dumps(diag, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"[diagnostics] wrote {args.diagnostics_json}")
+        return 0
+
     if mode == "A":
         print("Mode A (Direct): no concept channel -> 'why-by-concept' N/A. VERA = where-faithful.")
         print("  Faithfulness here = region grounding (softmax_r, alpha), reported by infer.py.")

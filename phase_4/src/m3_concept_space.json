@@ -748,8 +748,7 @@
       "lung lesion",
       "mass/nodule (not otherwise specified)",
       "multiple masses/nodules",
-      "calcified nodule",
-      "cyst/bullae"
+      "lung cancer"
     ],
     "Lung Opacity": [
       "lung opacity",
@@ -766,7 +765,8 @@
       "pleural/parenchymal scarring"
     ],
     "Pneumonia": [
-      "pneumonia"
+      "pneumonia",
+      "aspiration"
     ],
     "Pneumothorax": [
       "pneumothorax",
@@ -800,6 +800,7 @@
     "hyperaeration",
     "sub-diaphragmatic air",
     "hernia",
+    "calcified nodule",
     "elevated hemidiaphragm",
     "spinal degenerative changes",
     "pneumomediastinum",
@@ -807,13 +808,12 @@
     "shoulder osteoarthritis",
     "scoliosis",
     "bronchiectasis",
+    "cyst/bullae",
     "diaphragmatic eventration (benign)",
     "fluid overload/heart failure",
-    "aspiration",
     "copd/emphysema",
     "granulomatous disease",
     "interstitial lung disease",
-    "lung cancer",
     "alveolar hemorrhage",
     "goiter",
     "pericardial effusion"

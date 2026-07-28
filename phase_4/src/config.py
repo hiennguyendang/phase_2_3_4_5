@@ -60,7 +60,7 @@ POOL_HEADS = 4                   # heads for the bbox-guided region attention po
 MASK_BBOX = True                 # restrict each region query to its bbox cells (faithful "where")
 FUSE_BLOCKS = 1                  # cross-attn(current<-prior)+self+FFN blocks (keep shallow: overfits fast)
 FUSE_HEADS = 4
-BOX_SOURCE = "gt"                # "gt" (boxes.npy) | "detector" (boxes_det.npy) for the pool masks
+BOX_SOURCE = "detector"          # "detector" (boxes_det.npy) | "gt" (boxes.npy, oracle only)
 TEMPFUSE_INPUT_MODE = "feat"     # "feat" = v3; "feat_logits" adds M3 curr/prior/delta logits to the head
 
 # ---- model -------------------------------------------------------------------

@@ -109,8 +109,11 @@ class ConceptDiseaseHead(nn.Module):
 
     def __init__(self, num_concepts: int, num_chex: int, masked: bool = True):
         super().__init__()
-        self.weight = nn.Parameter(torch.randn(num_chex, num_concepts) * 0.01)
-        self.bias = nn.Parameter(torch.zeros(num_chex))
+        edge_init = max(float(config.FAITHFUL_EDGE_INIT), 1e-6)
+        raw_edge_init = torch.log(torch.expm1(torch.tensor(edge_init)))
+        self.weight = nn.Parameter(
+            torch.full((num_chex, num_concepts), float(raw_edge_init)))
+        self.bias = nn.Parameter(torch.full((num_chex,), float(config.FAITHFUL_BIAS_INIT)))
         m = torch.zeros(num_chex, num_concepts)
         if masked:
             for xi, cis in C.CHEX_FROM_CONCEPTS.items():
@@ -119,6 +122,12 @@ class ConceptDiseaseHead(nn.Module):
         else:
             m[:] = 1.0
         self.register_buffer("cmask", m)
+
+    @torch.no_grad()
+    def initialize_bias_from_prevalence(self, prevalence: torch.Tensor) -> None:
+        """Initialize disease priors without changing the monotone graph edges."""
+        p = prevalence.to(device=self.bias.device, dtype=self.bias.dtype).clamp(0.01, 0.99)
+        self.bias.copy_(torch.logit(p))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:      # x [...,num_concepts] concept activations
         w = F.softplus(self.weight) * self.cmask             # >=0, restricted to mapped concepts

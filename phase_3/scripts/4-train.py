@@ -53,15 +53,21 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--box-source", choices=["detector", "gt"], default=config.BOX_SOURCE,
                    help="bbox source for ROI-pool: detector (default) or gt (oracle ablation)")
     p.add_argument("--use-global", action="store_true")
+    p.add_argument("--global-only", action="store_true",
+                   help="global-embedding-only baseline (skips region/concept heads and losses)")
     # ---- architecture ablation knobs (override config; recorded in the checkpoint's "cfg") ----
     p.add_argument("--mask-bbox", action=argparse.BooleanOptionalAction, default=None,
                    help="mask each region query to its bbox cells (--no-mask-bbox = full grid)")
     p.add_argument("--neck-dim", type=int, default=None, help="region neck dim (0 = off/keep 512)")
-    p.add_argument("--region-agg", choices=["attention", "max", "mean"], default=None)
+    p.add_argument("--region-agg", choices=["lse", "attention", "max", "mean"], default=None)
     p.add_argument("--global-head", action=argparse.BooleanOptionalAction, default=None,
                    help="global-head+gate for relational findings (--no-global-head to disable)")
     p.add_argument("--disease-head", choices=["mlp", "linear", "nonneg", "faithful"], default=None,
                    help="(mode B) concept->disease head; 'faithful' = masked non-neg (intervention-safe)")
+    p.add_argument("--detach-concept", action=argparse.BooleanOptionalAction, default=None,
+                   help="stop disease losses from rewriting the concept bottleneck")
+    p.add_argument("--derive-no-finding", action=argparse.BooleanOptionalAction, default=None,
+                   help="derive No Finding from the other image-level disease probabilities")
     p.add_argument("--pool-heads", type=int, default=None)
     p.add_argument("--head-hidden", type=int, default=None)
     p.add_argument("--concept-dropout", type=float, default=None)
@@ -103,6 +109,7 @@ def main() -> int:
     args = parse_args()
     config.HEAD_TYPE = args.head_type
     config.USE_GLOBAL_TOKEN = args.use_global
+    config.GLOBAL_ONLY = args.global_only
     random.seed(args.seed); np.random.seed(args.seed); torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     # apply only the arch flags explicitly passed (None = keep config default)
@@ -110,6 +117,8 @@ def main() -> int:
     if args.neck_dim is not None: config.NECK_DIM = args.neck_dim or None
     if args.region_agg is not None: config.REGION_AGG = args.region_agg
     if args.disease_head is not None: config.DISEASE_HEAD = args.disease_head
+    if args.detach_concept is not None: config.DETACH_CONCEPT_FOR_DISEASE = args.detach_concept
+    if args.derive_no_finding is not None: config.DERIVE_NO_FINDING = args.derive_no_finding
     if args.global_head is not None: config.USE_GLOBAL_HEAD = args.global_head
     if args.pool_heads is not None: config.POOL_HEADS = args.pool_heads
     if args.head_hidden is not None: config.HEAD_HIDDEN = args.head_hidden
@@ -124,12 +133,16 @@ def main() -> int:
     if len(train_ds) == 0:
         raise SystemExit("[ERROR] no training samples (features missing or split empty)")
     feat_dim = train_ds.feat_dim()
-    print(f"feat_dim={feat_dim} | mode={args.mode} | head={args.head_type} | global={args.use_global}")
+    print(f"feat_dim={feat_dim} | mode={args.mode} | head={args.head_type} "
+          f"| global_token={args.use_global} | global_only={args.global_only}")
     # reproducibility: dump the exact run config next to the checkpoints
     (run_dir / "config.json").write_text(json.dumps({
         "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
         "n_train": len(train_ds), "n_val": len(val_ds), "feat_dim": feat_dim,
         "cfg": {"NECK_DIM": config.NECK_DIM, "USE_GLOBAL_HEAD": config.USE_GLOBAL_HEAD,
+                "GLOBAL_ONLY": config.GLOBAL_ONLY,
+                "DETACH_CONCEPT_FOR_DISEASE": config.DETACH_CONCEPT_FOR_DISEASE,
+                "DERIVE_NO_FINDING": config.DERIVE_NO_FINDING,
                 "MASK_BBOX": config.MASK_BBOX, "REGION_AGG": config.REGION_AGG,
                 "USE_POS_WEIGHT": config.USE_POS_WEIGHT, "HEAD_HIDDEN": config.HEAD_HIDDEN,
                 "LAMBDA_CONCEPT": config.LAMBDA_CONCEPT, "LAMBDA_REGION_CHEX": config.LAMBDA_REGION_CHEX,
@@ -140,6 +153,15 @@ def main() -> int:
     vl = DataLoader(val_ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
 
     model = M.build_model(feat_dim, args.mode).to(args.device)
+    if (args.mode == "B" and config.DISEASE_HEAD in {"faithful", "nonneg"}
+            and hasattr(model.disease_head, "initialize_bias_from_prevalence")):
+        labels = np.asarray(train_ds.rx).reshape(-1, C.NUM_CHEX)
+        pos = (labels == 1).sum(0).astype(np.float64)
+        neg = (labels == 0).sum(0).astype(np.float64)
+        prevalence = (pos + 1.0) / (pos + neg + 2.0)
+        model.disease_head.initialize_bias_from_prevalence(
+            torch.tensor(prevalence, dtype=torch.float32, device=args.device))
+        print("[faithful-init] edge=%.4f region-prior bias initialized" % config.FAITHFUL_EDGE_INIT)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
@@ -190,6 +212,7 @@ def main() -> int:
                 torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
                             "sched": sched.state_dict(), "feat_dim": feat_dim, "mode": args.mode,
                             "head_type": args.head_type, "use_global": args.use_global,
+                            "box_source": args.box_source, "seed": args.seed,
                             "cfg": config.snapshot(), "epoch": epoch, "best": best}, run_dir / "last.pt")
                 push()
         lr_now = opt.param_groups[0]["lr"]
@@ -227,7 +250,8 @@ def main() -> int:
 
         ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                 "feat_dim": feat_dim, "mode": args.mode, "head_type": args.head_type,
-                "use_global": args.use_global, "cfg": config.snapshot(), "epoch": epoch,
+                "use_global": args.use_global, "box_source": args.box_source, "seed": args.seed,
+                "cfg": config.snapshot(), "epoch": epoch,
                 "val_f1": f1, "val_auc": res["image_auc_macro"], "best": best}
         torch.save(ckpt, run_dir / "last.pt")
         if is_best:
