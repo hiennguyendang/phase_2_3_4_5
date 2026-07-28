@@ -57,31 +57,30 @@ def prepare_repo(repo_url: str) -> Path:
     )
 
 
-def find_bundle() -> Path:
-    """Find the uploaded vera_v2 bundle without hard-coding Kaggle's dataset slug."""
-    roots = [KAGGLE_DATASET_ROOT, Path("/kaggle/working")]
+def find_bundle(*, minimal: bool = False) -> Path:
+    """Resolve the exact attached dataset; avoid recursive scans of feature/image trees."""
     hits = []
-    for root in roots:
-        if not root.exists():
-            continue
-        markers = list(root.glob("m2_detector/last.pt"))
-        markers += list(root.glob("*/m2_detector/last.pt"))
-        markers += list(root.glob("*/vera_v2/m2_detector/last.pt"))
-        for marker in markers:
-            candidate = marker.parent.parent
-            if (candidate / "m3_labels_base" / "manifest.jsonl").exists():
-                hits.append(candidate)
+    for candidate in (BUNDLE_DATASET_ROOT, BUNDLE_DATASET_ROOT / "vera_v2"):
+        if (candidate / "m2_detector" / "last.pt").exists() and (candidate / "m3_labels_base" / "manifest.jsonl").exists():
+            hits.append(candidate)
     if not hits:
-        dataset = BUNDLE_DATASET_ROOT
-        archives = list(dataset.glob("*.zip")) if dataset.exists() else []
+        archives = list(BUNDLE_DATASET_ROOT.glob("*.zip")) if BUNDLE_DATASET_ROOT.exists() else []
         if len(archives) == 1:
             extracted = Path("/kaggle/working/vera_v2_inputs_extracted")
             extracted.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(archives[0]) as zf:
-                zf.extractall(extracted)
-            for marker in extracted.glob("**/m2_detector/last.pt"):
-                candidate = marker.parent.parent
-                if (candidate / "m3_labels_base" / "manifest.jsonl").exists():
+                if minimal:
+                    names = [n for n in zf.namelist() if (
+                        n.endswith("m2_detector/last.pt")
+                        or n.endswith("m2_detector/results.csv")
+                        or n.endswith("m2_detector/audit_report.json")
+                        or n.endswith("m3_labels_base/manifest.jsonl")
+                    )]
+                    zf.extractall(extracted, names=names)
+                else:
+                    zf.extractall(extracted)
+            for candidate in (extracted, extracted / "vera_v2"):
+                if (candidate / "m2_detector" / "last.pt").exists() and (candidate / "m3_labels_base" / "manifest.jsonl").exists():
                     hits.append(candidate)
     if len(hits) != 1:
         raise RuntimeError(f"expected exactly one uploaded vera_v2 bundle, found: {hits}")
