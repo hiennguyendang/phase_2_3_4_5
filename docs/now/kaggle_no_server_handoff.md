@@ -189,10 +189,12 @@ phase_5/verify.py
 phase_5/README.md
 ~~~
 
-M5 has no learned training step. It consumes final M3/M4 predictions, refits
-validation-only display thresholds, and renders the classification/progression/
-ground-truth HTML report. Existing GT-box calibration artifacts are provisional
-and must be regenerated after detector-box M3/M4 are accepted.
+M5 has no learned training step and does not fit M3 thresholds. The M3
+post-training stage fits validation-only disease thresholds and concept gates;
+M5 strictly consumes those frozen artifacts alongside final M3/M4 predictions
+and renders the classification/progression/ground-truth HTML report. Existing
+GT-box calibration artifacts are provisional and must be regenerated after
+detector-box M3/M4 are accepted.
 
 ## 4. What Must Be Uploaded To Kaggle
 
@@ -317,8 +319,11 @@ Cells:
    detector arrays there; never mutate /kaggle/input.
 3. Run the launcher preflight and a one-batch model/feature smoke test.
 4. Run run_paper_m3_v2.sh --profile local4060 --scope main first.
-5. Save best.pt, last.pt, logs, metrics, diagnostics, predictions, regional
-   audit, and faithfulness JSON after the main run.
+5. The main launcher automatically regenerates stale validation dumps, fits
+   pair-specific disease thresholds and concept gates, writes both CSV audits,
+   and creates `m3v2_vera_graph_lse_det.calibration.SUCCESS.json` only on
+   completion. Save best.pt, last.pt, logs, metrics, diagnostics, predictions,
+   regional audit, faithfulness JSON, the four calibration outputs, and marker.
 6. Resume with --scope all to obtain the eight remaining retained rows. If a
    Kaggle session is too short, expose a RUN_SCOPE/RUN_INDEX setting so one or
    two rows can be run per session while preserving the same run directory.
@@ -384,8 +389,10 @@ REGION_AGG = lse
 DERIVE_NO_FINDING = true
 validation and test diagnostics exist for every retained row
 faithfulness is run for every mode-B row
-post-training threshold work follows docs/now/m3_report_threshold_and_concept_policy.md
-per-pair disease thresholds and concept gates are not claimed before their audit artifacts exist
+schema-v2 validation dump records IDs, patient clusters, and checkpoint/manifest/box provenance
+main-row report_thresholds.json and concept_gate.json exist with matching provenance
+both calibration CSV audits and calibration.SUCCESS.json exist
+per-pair disease thresholds and concept gates are not claimed before those audit artifacts exist
 ~~~
 
 Do not use a legacy or GT-box checkpoint merely because it has a convenient
@@ -431,7 +438,8 @@ At minimum, bring back:
 
 ~~~
 M2: predictions.jsonl, boxes_det.npy, present_mask_det.npy, detector_provenance.json
-M3: all retained run dirs, especially main best.pt/last.pt, metrics, diagnostics, faithfulness
+M3: all retained run dirs, especially main best.pt/last.pt, metrics, diagnostics, faithfulness,
+    schema-v2 validation NPZ, report thresholds, concept gate, both CSV audits, success marker
 M4: fresh detector cache, selected_coefficients.env, retained run dirs, test/MS-CXR-T diagnostics
 M5: calibrated thresholds, final prediction JSONL, verifier output, selected HTML report
 ~~~

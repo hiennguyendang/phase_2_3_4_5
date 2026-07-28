@@ -86,17 +86,19 @@ python phase_5/calibrate.py --m3-pred data/m3_pred_val.jsonl --split val --out d
 python phase_5/run.py --m3-pred ... --m4-pred ... --temperature data/m5_temperature.json --out ...
 ```
 
-Before report generation, export per-disease thresholds from a validation diagnostics file:
+Before report generation, fit pair-specific disease thresholds and concept
+display gates from the complete schema-v2 M3 validation dump:
 
 ```bash
-python phase_3/scripts/export_thresholds.py \
-  --diagnostics artifacts/diagnostics/m3_B_faithful_xwalk_v2.val.diagnostics.json \
+python phase_3/scripts/11-calibrate_report.py \
+  --pred-dump artifacts/diagnostics/m3_paper_v2/m3v2_vera_graph_lse_det.val.pred.npz \
   --thresholds-json data/m5_disease_thresholds.json \
-  --concept-gate-json artifacts/calibration/m3_B_faithful_xwalk_v2.concept_gate.json \
-  --present-policy precision
+  --concept-gate-json data/m3_concept_gate.json \
+  --disease-audit-csv data/m3_report_threshold_audit.csv \
+  --concept-audit-csv data/m3_concept_gate_audit.csv
 python phase_5/run.py --m3-pred data/m3_pred.jsonl --m4-pred data/m4_pred.jsonl \
   --thresholds data/m5_disease_thresholds.json \
-  --concept-gate artifacts/calibration/m3_B_faithful_xwalk_v2.concept_gate.json \
+  --concept-gate data/m3_concept_gate.json \
   --out data/m5_reports_with_absent.jsonl
 ```
 
@@ -109,11 +111,16 @@ internal unknown/abstain band between them. Unknown diseases are omitted from th
 than rendered as a third class. The visible confidence is confidence in the reported state:
 calibrated `p(disease)` for present and `1-p(disease)` for absent. Thresholds remain in provenance.
 M3 inference must use `--all-region-diseases` so every confident `(disease, region)` cell can be
-retained. Absent region cells have no concepts, but their location is still available from the
+retained and should pass `--concept-gate` so visible evidence contains calibrated,
+graph-valid concepts ranked by learned edge contribution. Absent region cells have no concepts,
+but their location is still available from the
 region head. Without a threshold artifact, the CLI stops by default. The fixed
 0.10/0.50 fallback is available only through `--allow-fixed-threshold-fallback`
 for smoke demos; final paper output must use validation-selected thresholds.
 Thresholds must come from validation; do not derive them from the test split.
+Missing or unsupported region/disease and region/concept pairs abstain without a
+pooled fallback. M5 verifies checkpoint, label-manifest, and box-source
+provenance before consuming the artifacts.
 
 Temporal confidence is separately temperature-scaled per disease using M4
 validation readouts and regional-majority validation targets. A temporal row is

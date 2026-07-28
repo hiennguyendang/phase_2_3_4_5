@@ -9,6 +9,7 @@ PROFILE="h100mini"
 SCOPE="all"
 EP=""
 FORCE_EVAL="${FORCE_EVAL:-0}"
+CAL_BOOTSTRAP="${CAL_BOOTSTRAP:-200}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -139,6 +140,18 @@ PY
   [[ "$completed" -ge "$EP" ]]
 }
 
+pred_dump_current() {
+  local pred="$1"
+  [[ -s "$pred" ]] || return 1
+  "$PY" - "$pred" <<'PY' >/dev/null 2>&1
+import sys, numpy as np
+with np.load(sys.argv[1], allow_pickle=False) as z:
+    assert str(z["meta_schema_version"].item()) == "2"
+    for key in ("image_id", "patient_id", "region_patient_id", "concept_patient_id"):
+        assert key in z.files
+PY
+}
+
 train_one() {
   local name="$1" box="${RUN_BOX[$1]}" args="${RUN_ARGS[$1]}"
   local run="$RUNS/$name" log="$LOGDIR/$name.train.log"
@@ -171,7 +184,7 @@ eval_one() {
   require_file "$ck"
   for split in val test; do
     local diag="$DIAGDIR/$name.$split.json" pred="$DIAGDIR/$name.$split.pred.npz"
-    if [[ -s "$diag" && -s "$pred" && "$FORCE_EVAL" != "1" ]]; then
+    if [[ -s "$diag" ]] && pred_dump_current "$pred" && [[ "$FORCE_EVAL" != "1" ]]; then
       echo "[skip eval] $name/$split artifacts already exist"
     else
       "$PY" phase_3/scripts/5-eval.py \
@@ -199,6 +212,61 @@ eval_one() {
   fi
 }
 
+calibrate_main_report() {
+  local name="m3v2_vera_graph_lse_det"
+  local pred="$DIAGDIR/$name.val.pred.npz"
+  local thresholds="$DIAGDIR/$name.report_thresholds.json"
+  local gate="$DIAGDIR/$name.concept_gate.json"
+  local disease_csv="$DIAGDIR/$name.report_threshold_audit.csv"
+  local concept_csv="$DIAGDIR/$name.concept_gate_audit.csv"
+  local marker="$DIAGDIR/$name.calibration.SUCCESS.json"
+  require_file "$pred"
+  local calibration_current=0
+  if [[ -s "$marker" && -s "$thresholds" && -s "$gate" && -s "$disease_csv" && -s "$concept_csv" ]]; then
+    if "$PY" - "$marker" "$pred" "$thresholds" "$gate" <<'PY' >/dev/null 2>&1
+import hashlib, json, sys
+def sha(path):
+    h=hashlib.sha256()
+    with open(path,"rb") as f:
+        for block in iter(lambda:f.read(8<<20),b""): h.update(block)
+    return h.hexdigest()
+marker=json.load(open(sys.argv[1],encoding="utf-8"))
+thresholds=json.load(open(sys.argv[3],encoding="utf-8"))
+gate=json.load(open(sys.argv[4],encoding="utf-8"))
+assert marker["status"] == "complete"
+assert marker["thresholds_sha256"] == sha(sys.argv[3])
+assert marker["concept_gate_sha256"] == sha(sys.argv[4])
+assert thresholds["provenance"]["prediction_dump_sha256"] == sha(sys.argv[2])
+assert gate["provenance"]["prediction_dump_sha256"] == sha(sys.argv[2])
+PY
+    then calibration_current=1; fi
+  fi
+  if [[ "$calibration_current" == 1 && "$FORCE_EVAL" != "1" ]]; then
+    echo "[skip calibration] complete report artifacts already exist for $name"
+    return
+  fi
+  rm -f "$marker"
+  "$PY" phase_3/scripts/11-calibrate_report.py \
+    --pred-dump "$pred" --thresholds-json "$thresholds" --concept-gate-json "$gate" \
+    --disease-audit-csv "$disease_csv" --concept-audit-csv "$concept_csv" \
+    --bootstrap "$CAL_BOOTSTRAP" --seed "$SEED" \
+    2>&1 | tee "$LOGDIR/$name.calibration.log"
+  "$PY" - "$marker" "$thresholds" "$gate" <<'PY'
+import hashlib, json, sys, time
+from pathlib import Path
+def sha(path):
+    h=hashlib.sha256()
+    with open(path,"rb") as f:
+        for block in iter(lambda:f.read(8<<20),b""): h.update(block)
+    return h.hexdigest()
+Path(sys.argv[1]).write_text(json.dumps({
+    "status":"complete", "completed_at":time.time(),
+    "thresholds_sha256":sha(sys.argv[2]), "concept_gate_sha256":sha(sys.argv[3])
+},indent=2),encoding="utf-8")
+PY
+  echo "[calibration complete] $marker"
+}
+
 echo "[M3 paper v2] profile=$PROFILE scope=$SCOPE epochs=$EP batch=$BATCH workers=$W"
 echo "[M3 paper v2] features=$FEAT labels=$LABELS runs=$RUNS"
 
@@ -207,6 +275,9 @@ if [[ "$SCOPE" != "eval" ]]; then
 fi
 if [[ "$SCOPE" != "train" ]]; then
   for name in "${RUN_NAMES[@]}"; do eval_one "$name"; done
+  for name in "${RUN_NAMES[@]}"; do
+    [[ "$name" == "m3v2_vera_graph_lse_det" ]] && calibrate_main_report
+  done
 fi
 
 echo "[DONE] M3 paper matrix complete. Diagnostics: $DIAGDIR"

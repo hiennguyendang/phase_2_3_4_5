@@ -135,6 +135,10 @@ def concept_evidence(m3rec: dict, region: str | None, disease: str,
     """
     if region is None:
         return []
+    # No gate means no report-visible concept evidence. Disease inference is
+    # unaffected because M3 already consumed the continuous concept bottleneck.
+    if concept_gate is None:
+        return []
     entry = ((m3rec.get("regions") or {}).get(region) or {})
     concepts = (entry.get("disease_concepts") or {}).get(disease)
     if concepts is None:
@@ -142,13 +146,32 @@ def concept_evidence(m3rec: dict, region: str | None, disease: str,
         concepts = {name: prob for name, prob in (entry.get("concepts") or {}).items()
                     if name in allowed}
     items = []
+    graph_allowed = C.CONCEPTS_BY_DISEASE.get(disease, set())
     for name, value in concepts.items():
-        if concept_gate is not None:
-            threshold = concept_gate.get(name)
-            if threshold is None or float(value) < float(threshold):
+        if name not in graph_allowed:
+            continue
+        if isinstance(value, dict):
+            probability = float(value.get("prob", value.get("probability", 0.0)))
+            contribution = float(value.get("contribution", probability))
+            edge_weight = value.get("edge_weight")
+        else:
+            probability = float(value)
+            contribution = probability
+            edge_weight = None
+        if "region_by_name" in concept_gate:
+            gate_item = (((concept_gate.get("region_by_name") or {}).get(region) or {}).get(name))
+            if not isinstance(gate_item, dict) or not gate_item.get("allowed_for_why"):
                 continue
-        items.append({"concept": name, "prob": float(value)})
-    items.sort(key=lambda x: x["prob"], reverse=True)
+            threshold = gate_item.get("present_threshold")
+        else:
+            threshold = (concept_gate.get("global") or {}).get(name)
+        if threshold is None or probability < float(threshold):
+            continue
+        item = {"concept": name, "prob": probability, "contribution": contribution}
+        if edge_weight is not None:
+            item["edge_weight"] = float(edge_weight)
+        items.append(item)
+    items.sort(key=lambda x: (x["contribution"], x["prob"]), reverse=True)
     return items[:topk]
 
 
@@ -538,6 +561,11 @@ def assemble_image(m3rec: dict, m4rec: dict | None, temps: dict | None = None,
         "tables": {"classification": classification_rows, "progression": interval_changes},
         "coverage_map": coverage_map(m3rec),
         "box_source": m3rec.get("box_source"),
+        "calibration_provenance": {
+            "disease_thresholds": (thresholds or {}).get("_artifact"),
+            "concept_gate": (concept_gate or {}).get("_artifact"),
+            "m3_checkpoint_sha256": m3rec.get("m3_checkpoint_sha256"),
+        },
     }
     return report
 

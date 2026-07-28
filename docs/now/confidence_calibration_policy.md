@@ -86,25 +86,25 @@ the exported absent threshold is `null` and that disease cannot produce an
 explicit absent statement. The legacy `absent_precision` field is retained as
 an alias of the clearer `absent_npv` field.
 
-Image thresholds are disease-specific. The final design requires region
-thresholds for each `(disease, region)` pair because pooling all 29 regions can
-cause anatomically unsupported regions to inherit a disease-wide threshold.
-However, the current standard `5-eval.py`/Kaggle-notebook path still pools
-detected regions for its top-level regional diagnostics and reports named-region
-breakdowns at `0.5`. Pair-specific diagnostics are partially supported by
-`diagnostics_from_pred.py` and `export_thresholds.py`, but are not yet wired into
-the final Kaggle campaign. Do not describe pair-specific threshold production
-as implemented until the decision record above is completed.
+Image thresholds are disease-specific. Report-facing region thresholds are fit
+for each `(disease, region)` pair because pooling all 29 regions can cause
+anatomically unsupported regions to inherit a disease-wide threshold. The
+standard diagnostics retain their pooled benchmark views, while
+`phase_3/scripts/11-calibrate_report.py` now fits the pair-specific report
+operating points from the schema-v2 validation prediction dump. The M3 launcher
+and Kaggle notebook run and synchronize this stage automatically for the main
+detector row. Numerical final artifacts remain pending the real Kaggle run.
 
 Concept evidence is no longer selected unconditionally by top-k. The approved
 design keeps continuous concept probabilities inside the M3 disease forward
 path and applies thresholds only as post-hoc report-display gates. A visible
 concept must pass validation reliability, `(region, concept)` support, and the
 actual concept-to-disease graph edge; unsupported concepts are omitted rather
-than replaced by pooled or low-confidence evidence. The current inference and
-Kaggle paths do not yet implement this complete pair-specific gate. On the prior
+than replaced by pooled or low-confidence evidence. The inference, M5, launcher,
+and Kaggle paths now implement this complete pair-specific gate. On the prior
 detector-box validation run, zero concepts met the older pooled conservative
-display gate; final values must be regenerated for the frozen detector-box M3.
+display gate; that number is not the new result. Final values must be generated
+from the frozen detector-box M3 schema-v2 validation dump.
 
 ### Region confidence limitation
 
@@ -191,7 +191,7 @@ the final checkpoint is frozen.
 - For present and temporal display gates, also report achieved precision,
   specificity where applicable, support, and abstention coverage.
 
-## 6. Current local validation artifacts (2026-07-22)
+## 6. Legacy local validation artifacts (2026-07-22; not final v2 calibration)
 
 - M3 predictions: `data/demo/m3_pred.val.xwalk_v2.detector.jsonl`
   (22,136 validation images; detector boxes).
@@ -209,7 +209,8 @@ the final checkpoint is frozen.
   `data/demo/m5_reports.report_candidates_v2.precision90.gt.jsonl` and
   `data/demo/report_previews_precision90/`.
 
-The M3 audit produced image macro-AUC 0.831, region macro-AUC 0.874,
+These artifacts predate the new pair-specific implementation and are retained
+only for audit continuity. The M3 audit produced image macro-AUC 0.831, region macro-AUC 0.874,
 concept macro-AUC 0.531, and concept macro-F1 0.171. The sparse negative-label
 policy makes maximum-F1 thresholds unsuitable as a clinical display policy:
 the original three candidates contained 213--334 classification rows. The

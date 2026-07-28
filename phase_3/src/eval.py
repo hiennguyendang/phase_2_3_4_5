@@ -7,6 +7,7 @@ F1 is the metric that drives checkpoint selection; AUC is reported alongside.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -18,6 +19,22 @@ from torch.utils.data import DataLoader
 import config
 import constants as C
 from dataset import M3Dataset, collate
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(8 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _patient_id(image_id: str) -> str:
+    """Extract the stable MIMIC patient key without requiring metadata joins."""
+    for part in str(image_id).split("_"):
+        if part.startswith("p") and part[1:].isdigit():
+            return part
+    return str(image_id)
 
 
 def auc_binary(scores: np.ndarray, targets: np.ndarray) -> float:
@@ -350,6 +367,7 @@ def _diagnostic_table(prob: np.ndarray, tgt: np.ndarray, names: list[str],
 @torch.no_grad()
 def evaluate(model, loader, device, *, diagnostics: bool = False,
              pred_dump: Path | None = None,
+             pred_metadata: dict[str, str] | None = None,
              target_absent_npv: float = 0.95,
              min_absent_support: int = 30,
              min_region_pos: int = 30,
@@ -359,11 +377,13 @@ def evaluate(model, loader, device, *, diagnostics: bool = False,
     rd_p, rd_t, rd_m = [], [], []
     cc_p, cc_t, cc_m = [], [], []
     gt_m = []
+    image_ids: list[str] = []
     for b in loader:
         out = model(b["grid"].to(device), b["global"].to(device),
                     b["present_mask"].to(device), b["boxes"].to(device))
         img_p.append(torch.sigmoid(out["image_disease_logits"]).cpu().numpy())
         img_t.append(b["image_chexpert"].numpy())
+        image_ids.extend(str(x) for x in b["image_id"])
         gt_m.append(b.get("gt_present_mask", b["present_mask"]).numpy())
         if out.get("region_disease_logits") is not None:
             rd_p.append(torch.sigmoid(out["region_disease_logits"]).cpu().numpy())
@@ -426,9 +446,13 @@ def evaluate(model, loader, device, *, diagnostics: bool = False,
         res["concept_f1_macro"] = float("nan")
     if pred_dump is not None:
         pred_dump.parent.mkdir(parents=True, exist_ok=True)
+        image_id_array = np.asarray(image_ids, dtype=str)
+        patient_id_array = np.asarray([_patient_id(x) for x in image_ids], dtype=str)
         dump = {
             "image_prob": P.astype(np.float32),
             "image_target": T.astype(np.int8),
+            "image_id": image_id_array,
+            "patient_id": patient_id_array,
             "region_prob": rp.astype(np.float32) if rp is not None else np.empty((0, len(C.CHEX_NAMES)), dtype=np.float32),
             "region_target": rt.astype(np.int8) if rt is not None else np.empty((0, len(C.CHEX_NAMES)), dtype=np.int8),
         }
@@ -437,6 +461,7 @@ def evaluate(model, loader, device, *, diagnostics: bool = False,
             image_idx = np.broadcast_to(np.arange(rm.shape[0])[:, None], rm.shape)[rm]
             dump["region_index"] = region_idx.astype(np.int8)
             dump["region_image_index"] = image_idx.astype(np.int32)
+            dump["region_patient_id"] = patient_id_array[image_idx]
         if cp is not None:
             dump["concept_prob"] = cp.astype(np.float32)
             dump["concept_target"] = ct.astype(np.int8)
@@ -444,6 +469,9 @@ def evaluate(model, loader, device, *, diagnostics: bool = False,
             concept_image_idx = np.broadcast_to(np.arange(cm.shape[0])[:, None], cm.shape)[cm]
             dump["concept_region_index"] = concept_idx.astype(np.int8)
             dump["concept_image_index"] = concept_image_idx.astype(np.int32)
+            dump["concept_patient_id"] = patient_id_array[concept_image_idx]
+        for key, value in (pred_metadata or {}).items():
+            dump[f"meta_{key}"] = np.asarray(str(value))
         np.savez_compressed(pred_dump, **dump)
     return res
 
@@ -485,7 +513,15 @@ def main() -> int:
     m = M.build_model(ck["feat_dim"], ck["mode"]).to(args.device)
     m.load_state_dict(ck["model"])
     res = evaluate(m, loader, args.device, diagnostics=args.diagnostics_json is not None,
-                   pred_dump=args.pred_dump, target_absent_npv=args.target_absent_npv,
+                   pred_dump=args.pred_dump,
+                   pred_metadata={
+                       "schema_version": "2",
+                       "split": args.split,
+                       "box_source": args.box_source,
+                       "checkpoint_sha256": _sha256(args.ckpt),
+                       "manifest_sha256": _sha256(args.labels_dir / "manifest.jsonl"),
+                   },
+                   target_absent_npv=args.target_absent_npv,
                    min_absent_support=args.min_absent_support,
                    min_region_pos=args.min_region_pos, min_region_neg=args.min_region_neg)
     print(f"[{args.split}] image  F1 macro = {res['image_f1_macro']:.4f}  AUC macro = {res['image_auc_macro']:.4f}")

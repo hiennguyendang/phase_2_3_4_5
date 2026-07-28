@@ -13,6 +13,7 @@ template cannot go out of table.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -21,6 +22,14 @@ from assemble import assemble_image, realize_interval_template, realize_template
 from ground_truth import attach_ground_truth
 from paraphrase import paraphrase
 from verify import verify
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(8 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
 
 
 def _load_jsonl(path: Path) -> dict[str, dict]:
@@ -62,7 +71,14 @@ def _load_thresholds(path) -> dict | None:
         return None
     data = json.loads(p.read_text(encoding="utf-8"))
     raw = data.get("thresholds", data) if isinstance(data, dict) else {}
-    return raw if isinstance(raw, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    raw["_artifact"] = {
+        "sha256": _sha256(p), "path": str(p),
+        "schema_version": data.get("schema_version") if isinstance(data, dict) else None,
+        "provenance": data.get("provenance") if isinstance(data, dict) else None,
+    }
+    return raw
 
 
 def _load_concept_gate(path) -> dict | None:
@@ -70,13 +86,42 @@ def _load_concept_gate(path) -> dict | None:
     if not p or not p.exists():
         return None
     data = json.loads(p.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and isinstance(data.get("region_by_name"), dict):
+        return {
+            "region_by_name": data["region_by_name"],
+            "_artifact": {
+                "sha256": _sha256(p), "path": str(p),
+                "schema_version": data.get("schema_version"),
+                "provenance": data.get("provenance"),
+            },
+        }
     allowed = data.get("allow", []) if isinstance(data, dict) else []
     gate = {}
     for item in allowed:
         threshold = item.get("explanation_threshold", item.get("best_threshold"))
         if item.get("allowed_for_why") and threshold is not None:
             gate[str(item["concept"])] = float(threshold)
-    return gate
+    return {"global": gate, "_artifact": {"sha256": _sha256(p), "path": str(p),
+                                             "schema_version": "legacy"}}
+
+
+def _validate_m3_provenance(m3_map: dict[str, dict], artifact: dict | None,
+                            artifact_name: str) -> None:
+    provenance = ((artifact or {}).get("_artifact") or {}).get("provenance") or {}
+    checks = (
+        ("checkpoint_sha256", "m3_checkpoint_sha256", "checkpoint"),
+        ("manifest_sha256", "m3_manifest_sha256", "label manifest"),
+        ("box_source", "box_source", "box source"),
+    )
+    for expected_key, record_key, label in checks:
+        expected = provenance.get(expected_key)
+        if not expected:
+            continue
+        observed = {str(row.get(record_key)) for row in m3_map.values() if row.get(record_key)}
+        if observed != {str(expected)}:
+            detail = "missing" if not observed else f"found {sorted(observed)}"
+            raise SystemExit(
+                f"[ERROR] {artifact_name} expects M3 {label} {expected!r}, {detail}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -157,12 +202,16 @@ def main() -> int:
     temporal_temps, temporal_gates = _load_temporal_calibration(args.temporal_temperature)
     thresholds = _load_thresholds(args.thresholds)
     concept_gate = _load_concept_gate(args.concept_gate)
+    concept_count = (sum(
+        int(bool(item.get("allowed_for_why")))
+        for region in (concept_gate or {}).get("region_by_name", {}).values()
+        for item in region.values()) if concept_gate else 0)
     print(f"M3 rows: {len(m3_map):,} | M4 rows: {len(m4_map):,} | "
           f"temperature: {'per-class' if temps else 'identity (T=1)'} | "
           f"temporal temperature: {'per-disease' if temporal_temps else 'raw'} | "
           f"temporal gates: {'validation-fitted' if temporal_gates else 'fixed fallback'} | "
           f"thresholds: {'dual image/region' if thresholds else 'none'} | "
-          f"concept evidence: {len(concept_gate) if concept_gate is not None else 'ungated'} | "
+          f"concept evidence gates: {concept_count if concept_gate is not None else 'none (omit evidence)'} | "
           f"ground truth: {'metadata labels' if args.ground_truth_metadata else 'none'} | "
           "visible states: present/absent (unknown omitted)")
     if thresholds is None and not args.allow_fixed_threshold_fallback:
@@ -173,6 +222,14 @@ def main() -> int:
     if thresholds is None:
         print("[WARNING] no validation threshold artifact: using fixed 0.10/0.50 "
               "provisional fallback; do not use this report as paper evidence")
+    elif not isinstance(thresholds.get("region_by_name"), dict):
+        raise SystemExit(
+            "[ERROR] threshold artifact has no pair-specific region_by_name table; "
+            "rerun phase_3/scripts/11-calibrate_report.py")
+    if thresholds is not None:
+        _validate_m3_provenance(m3_map, thresholds, "disease threshold artifact")
+    if concept_gate is not None:
+        _validate_m3_provenance(m3_map, concept_gate, "concept gate artifact")
 
     reports, stats = run(m3_map, m4_map, args.realize, temps=temps,
                          thresholds=thresholds, include_absent=args.include_absent,

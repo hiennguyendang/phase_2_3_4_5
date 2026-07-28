@@ -1,13 +1,14 @@
 # M3 Report Threshold and Concept-Evidence Policy
 
-- Status: **design approved; implementation not started**
+- Status: **implemented in code; final detector-box validation artifacts pending Kaggle execution**
 - Decision date: 2026-07-28
 Applies to: final detector-box M3, its validation artifacts, and M5 report readout
 
-This document is the implementation contract to follow before changing the M3
-Kaggle notebook or report-generation code. It separates model training,
-post-hoc calibration, benchmark metrics, and report display. No statement in
-this document means that the corresponding code path is already wired.
+This document is both the frozen design contract and the implementation record.
+It separates model training, post-hoc calibration, benchmark metrics, and
+report display. The code path was implemented on 2026-07-28; numerical gates
+must not be claimed until the final detector-box validation run creates and
+audits the artifacts described below.
 
 ## 1. Ownership and stage boundary
 
@@ -33,23 +34,29 @@ M5 must never:
   operating point; or
 - reinterpret `unknown` as `absent`.
 
-## 2. Current implementation gap
+## 2. Implemented route and remaining execution gap
 
 The current M3 model already emits image disease logits `[B,14]`, regional
 disease logits `[B,29,14]`, and concept logits `[B,29,69]`.
 
-The current standard `phase_3/scripts/5-eval.py` path:
+The standard `phase_3/scripts/5-eval.py` path:
 
 - computes image diagnostics per disease;
 - pools all detected regions for its top-level regional disease diagnostics;
 - reports named-region metric breakdowns at a fixed threshold of `0.5`; and
-- does **not** create final report thresholds for every `(region, disease)`.
+- records full non-truncated validation probabilities and targets;
+- image identity and patient-cluster identity for image, region, and concept
+  rows; and
+- schema, split, checkpoint hash, label-manifest hash, and box-source metadata.
 
-`phase_3/scripts/diagnostics_from_pred.py` and
-`phase_3/scripts/export_thresholds.py` contain parts of a pair-specific route,
-but the final M3 Kaggle notebook does not yet run the complete route. Therefore
-the repository must not currently claim that the Kaggle campaign automatically
-produces final pair-specific report thresholds.
+`phase_3/scripts/11-calibrate_report.py` consumes that validation NPZ and emits
+the final pair-specific disease thresholds, concept gates, and CSV audits.
+`phase_3/run_paper_m3_v2.sh` runs it automatically for
+`m3v2_vera_graph_lse_det`, validates artifact hashes before resume-skipping,
+and writes a success marker only after all outputs complete. The Kaggle notebook
+copies the diagnostic directory to Drive. The remaining gap is execution: the
+final detector-box M3 validation dump and its numerical artifacts have not yet
+been produced on Kaggle.
 
 ## 3. Disease outputs and decision states
 
@@ -307,10 +314,9 @@ m3_concept_gate_audit.csv
 
 M5 must store the threshold and gate hashes in every generated report artifact.
 
-## 10. Implementation sequence after approval
+## 10. Implemented files and execution sequence
 
-No notebook change should precede this decision record. When implementation is
-authorized, proceed in this order:
+The implementation followed this order:
 
 1. Extend M3 validation prediction dumps with image/patient identity and full
    non-truncated concept scores.
@@ -323,6 +329,25 @@ authorized, proceed in this order:
 7. Add synthetic tests for threshold boundaries, unknown handling, graph masks,
    unsupported pairs, and provenance mismatches.
 8. Produce validation audits, freeze policy parameters, then run test once.
+
+The first seven items are implemented in:
+
+- `phase_3/src/eval.py` (schema-v2 validation dump and provenance);
+- `phase_3/scripts/11-calibrate_report.py` (dual disease thresholds,
+  pair-specific concept gates, uncertainty, and CSV/JSON artifacts);
+- `phase_3/scripts/7-infer.py` (strict gate use and learned-edge contribution);
+- `phase_3/run_paper_m3_v2.sh` and
+  `kaggle_notebooks/phase3_paper_v2_kaggle.ipynb` (resume-aware orchestration
+  and Drive synchronization);
+- `phase_5/run.py` and `phase_5/assemble.py` (strict consumption, provenance
+  checks, abstention, graph filtering, and contribution ranking); and
+- `phase_3/tests/test_report_calibration.py` plus
+  `phase_5/tests/test_strict_gates.py` (synthetic contract tests).
+
+Item 8 deliberately remains an execution milestone. Run the final validation
+campaign, inspect support and interval widths without test feedback, freeze any
+policy adjustment, then evaluate the frozen operating points on test exactly
+once.
 
 ## 11. Acceptance criteria
 

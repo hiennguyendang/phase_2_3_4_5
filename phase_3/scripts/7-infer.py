@@ -16,10 +16,12 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "src"))  # phase_3/src
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import config
@@ -35,6 +37,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--split", default="test")
     p.add_argument("--out", type=Path, default=config.WORK_ROOT / "m3_pred.jsonl")
     p.add_argument("--topk-concepts", type=int, default=8)
+    p.add_argument("--all-concepts", action="store_true",
+                   help="dump all 69 concept probabilities (calibration/audit only; large output)")
+    p.add_argument("--concept-gate", type=Path, default=None,
+                   help="pair-specific (region,concept) display gate from 11-calibrate_report.py")
     p.add_argument("--topk-cells", type=int, default=0,
                    help="dump top-k attention-pool grid cells per region (M5 'where'); 0 = off")
     p.add_argument("--all-region-diseases", action="store_true",
@@ -49,6 +55,31 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(8 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _load_concept_gate(path: Path | None) -> dict | None:
+    if path is None:
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    regions = data.get("region_by_name") if isinstance(data, dict) else None
+    if not isinstance(regions, dict):
+        raise SystemExit("[ERROR] concept gate must contain pair-specific region_by_name entries")
+    return data
+
+
+def _concept_gate_item(gate: dict | None, region: str, concept: str) -> dict | None:
+    if gate is None:
+        return None
+    item = ((gate.get("region_by_name") or {}).get(region) or {}).get(concept)
+    return item if isinstance(item, dict) else None
+
+
 @torch.no_grad()
 def main() -> int:
     import model as M
@@ -58,6 +89,25 @@ def main() -> int:
     config.USE_GLOBAL_TOKEN = ck.get("use_global", config.USE_GLOBAL_TOKEN)
     m = M.build_model(ck["feat_dim"], ck["mode"]).to(args.device).eval()
     m.load_state_dict(ck["model"])
+    concept_gate = _load_concept_gate(args.concept_gate)
+    checkpoint_hash = _sha256(args.ckpt)
+    manifest_hash = _sha256(args.labels_dir / "manifest.jsonl")
+    concept_gate_hash = _sha256(args.concept_gate) if args.concept_gate is not None else None
+    if concept_gate is not None:
+        gate_provenance = concept_gate.get("provenance") or {}
+        expected_checkpoint = gate_provenance.get("checkpoint_sha256")
+        expected_box_source = gate_provenance.get("box_source")
+        expected_manifest = gate_provenance.get("manifest_sha256")
+        if expected_checkpoint and expected_checkpoint != checkpoint_hash:
+            raise SystemExit("[ERROR] concept gate was fitted for a different M3 checkpoint")
+        if expected_box_source and expected_box_source != args.box_source:
+            raise SystemExit("[ERROR] concept gate box_source does not match inference")
+        if expected_manifest and expected_manifest != manifest_hash:
+            raise SystemExit("[ERROR] concept gate was fitted for a different M3 label manifest")
+    effective_edges = None
+    if hasattr(m, "disease_head") and hasattr(m.disease_head, "weight") \
+            and hasattr(m.disease_head, "cmask"):
+        effective_edges = (F.softplus(m.disease_head.weight) * m.disease_head.cmask).detach().cpu()
 
     ds = M3Dataset(args.labels_dir, args.features_root, args.split, box_source=args.box_source)
     if args.image_id:
@@ -83,6 +133,11 @@ def main() -> int:
                 rec = {
                     "image_id": iid,
                     "box_source": args.box_source,
+                    "m3_checkpoint_sha256": checkpoint_hash,
+                    "m3_manifest_sha256": manifest_hash,
+                    "concept_gate_sha256": concept_gate_hash,
+                    "concept_evidence_policy": ("pair_specific_gate" if concept_gate is not None
+                                                else "legacy_topk_0.5"),
                     "image_disease": {C.CHEX_NAMES[c]: round(float(img[j, c]), 4) for c in range(C.NUM_CHEX)},
                     "regions": {},
                 }
@@ -97,20 +152,59 @@ def main() -> int:
                                         if args.all_region_diseases or rd[j, r, c] > 0.5},
                         }
                         if cc is not None:
-                            top = torch.topk(cc[j, r], args.topk_concepts)
-                            entry["concepts"] = {C.CONCEPT_NAMES[int(i)]: round(float(p), 3)
-                                                 for p, i in zip(top.values, top.indices) if p > 0.5}
+                            region_name = C.REGION_NAMES[r]
+                            if args.all_concepts:
+                                entry["concepts"] = {
+                                    C.CONCEPT_NAMES[ci]: round(float(cc[j, r, ci]), 6)
+                                    for ci in range(C.NUM_CONCEPTS)
+                                }
+                            elif concept_gate is not None:
+                                selected = {}
+                                for ci, concept_name in enumerate(C.CONCEPT_NAMES):
+                                    gate_item = _concept_gate_item(concept_gate, region_name, concept_name)
+                                    threshold = (gate_item or {}).get("present_threshold")
+                                    probability = float(cc[j, r, ci])
+                                    if ((gate_item or {}).get("allowed_for_why")
+                                            and threshold is not None and probability >= float(threshold)):
+                                        selected[concept_name] = round(probability, 6)
+                                entry["concepts"] = selected
+                            else:
+                                top = torch.topk(cc[j, r], args.topk_concepts)
+                                entry["concepts"] = {
+                                    C.CONCEPT_NAMES[int(i)]: round(float(p), 3)
+                                    for p, i in zip(top.values, top.indices) if p > 0.5
+                                }
                             disease_concepts = {}
                             for disease_idx, concept_ids in C.CHEX_FROM_CONCEPTS.items():
                                 if not concept_ids:
                                     continue
-                                values = cc[j, r, concept_ids]
-                                count = min(args.topk_concepts, len(concept_ids))
-                                selected = torch.topk(values, count)
+                                candidates = []
+                                for concept_idx in concept_ids:
+                                    concept_name = C.CONCEPT_NAMES[concept_idx]
+                                    probability = float(cc[j, r, concept_idx])
+                                    if concept_gate is not None:
+                                        gate_item = _concept_gate_item(concept_gate, region_name, concept_name)
+                                        threshold = (gate_item or {}).get("present_threshold")
+                                        if (not (gate_item or {}).get("allowed_for_why")
+                                                or threshold is None or probability < float(threshold)):
+                                            continue
+                                    elif probability <= 0.5:
+                                        continue
+                                    edge_weight = (float(effective_edges[disease_idx, concept_idx])
+                                                   if effective_edges is not None else None)
+                                    contribution = (probability * edge_weight
+                                                    if edge_weight is not None else probability)
+                                    candidates.append((contribution, concept_name, probability, edge_weight))
+                                candidates.sort(reverse=True)
                                 evidence = {
-                                    C.CONCEPT_NAMES[concept_ids[int(i)]]: round(float(p), 3)
-                                    for p, i in zip(selected.values, selected.indices)
-                                    if p > 0.5
+                                    name: {
+                                        "prob": round(probability, 6),
+                                        "edge_weight": (round(edge_weight, 6)
+                                                        if edge_weight is not None else None),
+                                        "contribution": round(contribution, 6),
+                                    }
+                                    for contribution, name, probability, edge_weight
+                                    in candidates[:args.topk_concepts]
                                 }
                                 if evidence:
                                     disease_concepts[C.CHEX_NAMES[disease_idx]] = evidence
