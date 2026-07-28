@@ -1,7 +1,7 @@
 # M3 Report Threshold and Concept-Evidence Policy
 
-Status: **design approved; implementation not started**  
-Decision date: 2026-07-28  
+- Status: **design approved; implementation not started**
+- Decision date: 2026-07-28
 Applies to: final detector-box M3, its validation artifacts, and M5 report readout
 
 This document is the implementation contract to follow before changing the M3
@@ -337,4 +337,3 @@ authorized, proceed in this order:
 - M5 does not learn or optimize anything.
 - Paper tables distinguish benchmark performance from conservative report
   operation and report coverage/abstention with uncertainty.
-
