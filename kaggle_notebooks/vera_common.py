@@ -13,10 +13,28 @@ from pathlib import Path
 
 DRIVE_FOLDER_ID = "1a-a-P5i9lB8iN6t5wP5iNXsvZpDHdARp"
 KAGGLE_DATASET_ROOT = Path("/kaggle/input/datasets/nguynnghin")
-IMAGE_ROOT = KAGGLE_DATASET_ROOT / "mimic-cxr-448"
+IMAGE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "mimic-cxr-448"
 FEATURE_ROOT = KAGGLE_DATASET_ROOT / "frozen" / "frozen"
 BUNDLE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-inputs"
 M2_OUTPUT_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-detector-outputs"
+
+
+def find_image_root() -> Path:
+    """Locate the p10..p19 tree without recursively scanning hundreds of thousands of files."""
+    candidates = [IMAGE_DATASET_ROOT / "mimic-cxr-448", IMAGE_DATASET_ROOT]
+    if IMAGE_DATASET_ROOT.exists():
+        candidates += [p for p in IMAGE_DATASET_ROOT.iterdir() if p.is_dir()]
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if any((candidate / f"p{i}").is_dir() for i in range(10, 20)):
+            return candidate
+    raise FileNotFoundError(
+        f"could not find p10..p19 image tree under {IMAGE_DATASET_ROOT}; "
+        f"top-level entries={list(IMAGE_DATASET_ROOT.iterdir())[:20] if IMAGE_DATASET_ROOT.exists() else []}"
+    )
 
 
 def prepare_repo(repo_url: str) -> Path:
