@@ -19,6 +19,44 @@ BUNDLE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-inputs"
 M2_OUTPUT_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-detector-outputs"
 
 
+def prepare_repo(repo_url: str) -> Path:
+    """Clone GitHub when Internet works, otherwise use the uploaded code dataset."""
+    target = Path("/kaggle/working/vera_repo")
+    if (target / "phase_2" / "scripts" / "yolo" / "5-infer_yolo.py").exists():
+        return target
+    if target.exists():
+        shutil.rmtree(target)
+    try:
+        subprocess.run(["git", "clone", repo_url, str(target)], check=True)
+        commit = subprocess.check_output(
+            ["git", "-C", str(target), "rev-parse", "HEAD"], text=True
+        ).strip()
+        print("source: GitHub commit", commit)
+        return target
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print("[fallback] GitHub clone unavailable:", exc)
+
+    code_root = KAGGLE_DATASET_ROOT / "vera-v2-code"
+    archives = list(code_root.glob("*.zip")) if code_root.exists() else []
+    if len(archives) == 1:
+        extracted = Path("/kaggle/working/vera_v2_code_extracted")
+        extracted.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archives[0]) as zf:
+            zf.extractall(extracted)
+        candidates = [extracted] + list(extracted.glob("*/"))
+    else:
+        candidates = [code_root]
+    for candidate in candidates:
+        if (candidate / "phase_2" / "scripts" / "yolo" / "5-infer_yolo.py").exists():
+            shutil.copytree(candidate, target, dirs_exist_ok=True)
+            print("source: Kaggle code dataset", candidate)
+            return target
+    raise RuntimeError(
+        "GitHub clone failed and no valid code dataset was found at "
+        "/kaggle/input/datasets/nguynnghin/vera-v2-code"
+    )
+
+
 def find_bundle() -> Path:
     """Find the uploaded vera_v2 bundle without hard-coding Kaggle's dataset slug."""
     roots = [KAGGLE_DATASET_ROOT, Path("/kaggle/working")]
