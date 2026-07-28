@@ -103,9 +103,10 @@ checkpoint is frozen:
 3. Retained regularization and architecture ablations.
 4. Test split, MS-CXR-T external audit, and flip/null consistency checks.
 
-The current retained plan is 21 unique detector-box M4 trainings: the 9-cell
-coefficient grid plus the retained regularization and architecture rows. The
-paper launcher is authoritative for the exact list.
+The current retained plan is 18 unique detector-box M4 trainings: the 9-cell
+coefficient grid, 2 additional architecture rows, and 7 additional loss rows.
+A separate matched GT-box oracle makes 19 total trainings. The paper launcher
+is authoritative for the exact list.
 
 The exact run names and coefficient values must come from
 phase_4/run_paper_m4_v2.sh; do not infer a numeric value from an old run name.
@@ -171,6 +172,12 @@ phase_4/scripts/7-temporal_consistency.py
 phase_4/run_paper_m4_v2.sh
 phase_4/run_m4_retrain_matrix.sh
 ~~~
+
+Before launching the final campaign, also read
+`docs/now/m4_temporal_calibration_and_readout_policy.md`. Its 2026-07-28 audit
+found that the current M4 dataset uses the GT `present_mask.npy` even for
+detector-box runs, and that disease-level majority calibration conflicts with
+mixed regional directions. These are stop conditions, not post-run cleanup.
 
 M4 is staged on a frozen M3. It needs the M3 region cache and, for TempFuse,
 the original frozen BioViL-T patch grids. Use --box-source detector. The

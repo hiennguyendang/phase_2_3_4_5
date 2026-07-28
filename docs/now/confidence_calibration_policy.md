@@ -138,6 +138,14 @@ as an explicit fallback when no temporal calibration artifact is supplied.
 Support Devices and No Finding are
 excluded from disease progression.
 
+Implementation audit on 2026-07-28 identified two blockers in this paragraph's
+current path: detector-box datasets still load the GT region-presence mask, and
+the calibration target uses unmasked regional majority voting despite mixed
+regional directions. The target, provenance, uncertainty, strict no-fallback
+behavior, and lead-region dominance policy are not final. See
+`docs/now/m4_temporal_calibration_and_readout_policy.md`; do not generate final
+temporal calibration artifacts until that decision record is resolved.
+
 Readout correction applied on 2026-07-22: `interval_changes[].confidence` now
 means change confidence. For `improved`/`worsened`, it is the selected M4
 calibrated softmax probability; for `new`/`resolved`, it is the minimum of current and
