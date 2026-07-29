@@ -19,7 +19,12 @@ IMAGE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "mimic-cxr-448"
 IMAGE_ROOT = IMAGE_DATASET_ROOT / "mimic-cxr-448"
 FEATURE_ROOT = KAGGLE_DATASET_ROOT / "frozen" / "frozen"
 BUNDLE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-inputs"
-M2_OUTPUT_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-detector-outputs"
+M2_OUTPUT_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-m2-detector-outputs"
+M2_LABELS_ROOT = (
+    M2_OUTPUT_DATASET_ROOT
+    / "vera-v2-m2-detector-output"
+    / "m3_labels_detector_v2"
+)
 
 
 def find_image_root() -> Path:
@@ -111,13 +116,13 @@ def find_bundle(*, minimal: bool = False) -> Path:
 def find_m2_outputs() -> Path:
     """Return the detector-label directory at the canonical Kaggle mount."""
     required = ("boxes_det.npy", "present_mask_det.npy", "detector_provenance.json")
-    labels = M2_OUTPUT_DATASET_ROOT / "m3_labels_detector_v2"
+    labels = M2_LABELS_ROOT
     missing = [name for name in required if not (labels / name).is_file()]
     if missing:
         raise RuntimeError(
             f"missing M2 detector files under {labels}: {missing}. "
-            "Attach the Kaggle dataset vera-v2-detector-outputs and keep "
-            "the m3_labels_detector_v2 folder at its dataset root."
+            "Attach the Kaggle dataset vera-v2-m2-detector-outputs with the "
+            "vera-v2-m2-detector-output wrapper folder shown in the M2 export."
         )
     return labels
 
