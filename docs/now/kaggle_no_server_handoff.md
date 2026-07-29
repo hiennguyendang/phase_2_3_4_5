@@ -241,6 +241,26 @@ dataset or copy them to Drive before ending the session.
 
 ### Dataset C: M3 training input
 
+For the current Kaggle handoff, upload the fresh M2 result folder as a separate
+dataset named **`vera-v2-detector-outputs`**. The M3-v2 paper notebook is
+`kaggle_notebooks/phase3_paper_v2_kaggle.ipynb`. Do not use the legacy notebook
+under `phase_3/notebooks/` for this campaign.
+
+The M3 notebook expects these canonical mounts:
+
+```text
+/kaggle/input/datasets/nguynnghin/vera-v2-inputs
+/kaggle/input/datasets/nguynnghin/vera-v2-detector-outputs
+/kaggle/input/datasets/nguynnghin/frozen
+```
+
+The M2 output dataset must retain `boxes_det.npy`, `present_mask_det.npy`, and
+`detector_provenance.json` under `m3_labels_detector_v2/`; keep
+`predictions.jsonl` as the detector audit trail. The authoritative
+`manifest.jsonl` remains in `vera-v2-inputs/m3_labels_base`. The notebook copies
+that label bundle into `/kaggle/working`, overlays the detector arrays, and
+checks their row count and shape against the manifest before training.
+
 ~~~
 data/m3_labels/                         # about 0.65 GB locally
 data/m3_concept_space.json

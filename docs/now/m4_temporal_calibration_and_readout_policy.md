@@ -85,6 +85,50 @@ The M3 disease logits are continuous inputs. M3 display thresholds are not used
 inside M4. The head is a free MLP, so the main M4 is not a temporal concept
 bottleneck and does not support a faithful concept-level "why changed" claim.
 
+### 3.1 M3-to-M4 disease-logit contract
+
+The current main protocol intentionally passes the complete 14-dimensional M3
+disease-logit vector for current, prior, and their difference into M4. It does
+**not** hard-mask the vector to diseases that passed an M3 report threshold, and
+it does not select diseases using their aggregate validation F1. This is a
+training/inference contract, not a report decision:
+
+- M4 trains on all valid `(region, disease)` temporal cells, including diseases
+  for which M3 is weak on average.
+- A validation F1 is a property of a disease/model/split, not evidence that a
+  particular study contains that disease. It therefore cannot be used as a
+  per-study feature selector.
+- Hard masking would create an error cascade and a train/inference mismatch:
+  an M3 miss would remove the temporal model's input before M4 could learn from
+  visual evidence, while an M3 false positive could still be carried as a hard
+  positive feature.
+
+The all-logit main row must therefore be audited rather than silently replaced.
+The following separate ablations are permitted and must not overwrite the main
+M4 campaign:
+
+1. **Visual-only M4:** remove current/prior/delta M3 disease logits.
+2. **Soft-confidence M4.5:** retain all 14 channels but attenuate each disease's
+   M3 channels with the frozen, calibrated per-study M3 probabilities. The same
+   transformation must be used in train, validation, test, and inference.
+3. **Hard-gated M4.5:** zero a disease channel only for report-time analysis;
+   this is not a primary training protocol because it is brittle and cannot
+   recover an M3 miss.
+
+M4.5 is selected only after comparing temporal accuracy, selective precision,
+coverage, and false temporal-call rate. It must not change the existing M4
+checkpoint or headline results.
+
+There are two explicit operating modes:
+
+- **Benchmark mode:** emit one of the three temporal classes for every external
+  benchmark item, without M3 display gating, so comparison with MS-CXR-T,
+  BioViL-T, and CoCa-CXR is apples-to-apples.
+- **Report mode:** first require the M3 disease gate on the current/prior
+  study, then require regional M3 relevance and M4 temporal confidence gates.
+  A disease that fails these gates cannot receive a temporal sentence in M5,
+  even if raw M4 logits have a high argmax.
+
 The repository also contains `FTCBTKAN` and
 `FaithfulTemporalConceptHead`, which route signed M3 concept deltas through a
 masked non-negative map. That branch is excluded from the final launcher after
