@@ -109,73 +109,17 @@ def find_bundle(*, minimal: bool = False) -> Path:
 
 
 def find_m2_outputs() -> Path:
-    """Return the unique detector-label directory from any attached Kaggle dataset.
-
-    The M2 export may be attached as a directory or as the convenience ZIP, and
-    Kaggle may add one or more wrapper directories.  Resolve by artifact content
-    instead of relying on the dataset slug or a fixed nesting depth.
-    """
-    root = KAGGLE_DATASET_ROOT
-    preferred = M2_OUTPUT_DATASET_ROOT
+    """Return the detector-label directory at the canonical Kaggle mount."""
     required = ("boxes_det.npy", "present_mask_det.npy", "detector_provenance.json")
-
-    def valid_label_dir(path: Path) -> bool:
-        return path.is_dir() and all((path / name).is_file() for name in required)
-
-    mounted = [p for p in root.iterdir() if p.is_dir()] if root.exists() else []
-    candidates = [
-        preferred / "m3_labels_detector_v2",
-        preferred / "vera_v2_detector_outputs" / "m3_labels_detector_v2",
-        preferred,
-    ]
-    # Bounded globs avoid walking through the 252k-file feature dataset.
-    for pattern in (
-        "*/detector_provenance.json",
-        "*/*/detector_provenance.json",
-        "*/*/*/detector_provenance.json",
-        "*/*/*/*/detector_provenance.json",
-    ):
-        candidates.extend(marker.parent for marker in root.glob(pattern))
-
-    hits: list[Path] = []
-    for path in candidates:
-        resolved = path.resolve()
-        if valid_label_dir(resolved) and resolved not in hits:
-            hits.append(resolved)
-
-    if not hits:
-        archives = []
-        for dataset_dir in mounted:
-            archives.extend(dataset_dir.glob("*.zip"))
-            archives.extend(dataset_dir.glob("*/*.zip"))
-        matching_archives = []
-        for archive in archives:
-            try:
-                with zipfile.ZipFile(archive) as zf:
-                    names = zf.namelist()
-                if any(name.endswith("detector_provenance.json") for name in names) \
-                        and any(name.endswith("boxes_det.npy") for name in names):
-                    matching_archives.append(archive)
-            except zipfile.BadZipFile:
-                continue
-        for index, archive in enumerate(matching_archives):
-            extracted = Path(f"/kaggle/working/vera_v2_detector_outputs_extracted_{index}")
-            if extracted.exists():
-                shutil.rmtree(extracted)
-            extracted.mkdir(parents=True)
-            with zipfile.ZipFile(archive) as zf:
-                zf.extractall(extracted)
-            for marker in extracted.glob("**/detector_provenance.json"):
-                if valid_label_dir(marker.parent) and marker.parent.resolve() not in hits:
-                    hits.append(marker.parent.resolve())
-    if len(hits) != 1:
+    labels = M2_OUTPUT_DATASET_ROOT / "m3_labels_detector_v2"
+    missing = [name for name in required if not (labels / name).is_file()]
+    if missing:
         raise RuntimeError(
-            "attach exactly one completed M2 detector-output dataset. Expected "
-            "m3_labels_detector_v2/{boxes_det.npy,present_mask_det.npy,"
-            "detector_provenance.json} or the M2 ZIP. "
-            f"Attached dataset dirs={[p.name for p in mounted]}; resolved={hits}"
+            f"missing M2 detector files under {labels}: {missing}. "
+            "Attach the Kaggle dataset vera-v2-detector-outputs and keep "
+            "the m3_labels_detector_v2 folder at its dataset root."
         )
-    return hits[0]
+    return labels
 
 
 def configure_drive() -> str:
