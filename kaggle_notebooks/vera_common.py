@@ -19,7 +19,7 @@ IMAGE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "mimic-cxr-448"
 IMAGE_ROOT = IMAGE_DATASET_ROOT / "mimic-cxr-448"
 FEATURE_ROOT = KAGGLE_DATASET_ROOT / "frozen" / "frozen"
 BUNDLE_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-inputs"
-M2_OUTPUT_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-m2-detector-outputs"
+M2_OUTPUT_DATASET_ROOT = KAGGLE_DATASET_ROOT / "vera-v2-m2-detector-output"
 M2_LABELS_ROOT = (
     M2_OUTPUT_DATASET_ROOT
     / "vera-v2-m2-detector-output"
@@ -121,8 +121,9 @@ def find_m2_outputs() -> Path:
     if missing:
         raise RuntimeError(
             f"missing M2 detector files under {labels}: {missing}. "
-            "Attach the Kaggle dataset vera-v2-m2-detector-outputs with the "
-            "vera-v2-m2-detector-output wrapper folder shown in the M2 export."
+            "Attach the Kaggle dataset displayed as vera-v2-m2-detector-outputs; "
+            "Kaggle must mount it as vera-v2-m2-detector-output with the same-named "
+            "wrapper folder produced by the M2 export."
         )
     return labels
 

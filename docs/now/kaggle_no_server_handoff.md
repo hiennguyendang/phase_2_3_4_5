@@ -250,7 +250,7 @@ The M3 notebook expects these canonical mounts:
 
 ```text
 /kaggle/input/datasets/nguynnghin/vera-v2-inputs
-/kaggle/input/datasets/nguynnghin/vera-v2-m2-detector-outputs
+/kaggle/input/datasets/nguynnghin/vera-v2-m2-detector-output
 /kaggle/input/datasets/nguynnghin/frozen
 ```
 
