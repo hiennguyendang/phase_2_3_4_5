@@ -20,6 +20,7 @@ in ONE place without touching the model.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,7 @@ import torch
 import config
 
 GRID_TOKENS = config.GRID_TOKENS  # 196
+_INDEX_CACHE: dict[tuple[str, tuple[str, ...]], dict[str, Path]] = {}
 
 
 class FeatureStore:
@@ -42,9 +44,31 @@ class FeatureStore:
 
     def _build_index(self) -> dict[str, Path]:
         idx: dict[str, Path] = {}
-        for suf in self.suffixes:                      # .npy preferred (listed first) on stem clash
-            for p in self.root.rglob(f"*{suf}"):
-                idx.setdefault(p.stem, p)
+        rank = {suffix: i for i, suffix in enumerate(self.suffixes)}
+
+        # Kaggle's frozen cache is flat and contains about 252k small files.  A
+        # single scandir pass is substantially cheaper than one recursive walk
+        # per suffix.  Fall back to rglob for mirrored/nested caches.
+        has_subdirs = False
+        if self.root.is_dir():
+            with os.scandir(self.root) as entries:
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        has_subdirs = True
+                        continue
+                    suffix = Path(entry.name).suffix
+                    if suffix not in rank:
+                        continue
+                    stem = Path(entry.name).stem
+                    previous = idx.get(stem)
+                    if previous is None or rank[suffix] < rank[previous.suffix]:
+                        idx[stem] = Path(entry.path)
+        if has_subdirs:
+            for suf in self.suffixes:                  # .npy preferred on stem clash
+                for p in self.root.rglob(f"*{suf}"):
+                    previous = idx.get(p.stem)
+                    if previous is None or rank[suf] < rank[previous.suffix]:
+                        idx[p.stem] = p
         if not idx:
             raise FileNotFoundError(f"no '{', '.join(self.suffixes)}' features under {self.root}")
         return idx
@@ -52,7 +76,12 @@ class FeatureStore:
     @property
     def index(self) -> dict[str, Path]:
         if self._index is None:
-            self._index = self._build_index()
+            key = (str(self.root.resolve()), self.suffixes)
+            cached = _INDEX_CACHE.get(key)
+            if cached is None:
+                cached = self._build_index()
+                _INDEX_CACHE[key] = cached
+            self._index = cached
         return self._index
 
     def has(self, image_id: str) -> bool:

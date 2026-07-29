@@ -50,6 +50,9 @@ DIAGDIR="${DIAGDIR:-artifacts/diagnostics/m3_paper_v2}"
 SYNC_REMOTE="${SYNC_REMOTE:-}"
 SYNC_DIAG_REMOTE="${SYNC_DIAG_REMOTE:-}"
 SYNC_EVERY="${SYNC_EVERY:-0}"
+AMP="${AMP:-0}"
+DATA_PARALLEL="${DATA_PARALLEL:-0}"
+LOG_EVERY="${LOG_EVERY:-100}"
 mkdir -p "$RUNS" "$LOGDIR" "$DIAGDIR"
 
 require_file() { [[ -f "$1" ]] || { echo "[ERROR] missing file: $1" >&2; exit 2; }; }
@@ -173,12 +176,14 @@ train_one() {
     echo "[ERROR] $run has best.pt but no last.pt; refusing to overwrite a non-resumable run" >&2
     exit 2
   fi
-  local resume=() sync=()
+  local resume=() sync=() performance=()
   # On an ephemeral Kaggle session the local run directory starts empty.  If
   # a Drive remote is configured, --resume first pulls the remote run and then
   # continues from last.pt (or starts fresh when the remote has no checkpoint).
   [[ -f "$run/last.pt" || -n "$SYNC_REMOTE" ]] && resume=(--resume)
   [[ -n "$SYNC_REMOTE" ]] && sync=(--sync-remote "$SYNC_REMOTE" --sync-every "$SYNC_EVERY")
+  [[ "$AMP" == "1" ]] && performance+=(--amp)
+  [[ "$DATA_PARALLEL" == "1" ]] && performance+=(--data-parallel)
   echo "===== train $name (box=$box) =====" | tee -a "$log"
   # RUN_ARGS contains only controlled flags declared above.
   # shellcheck disable=SC2086
@@ -186,6 +191,7 @@ train_one() {
     --labels-dir "$LABELS" --features-root "$FEAT" --out "$RUNS" --name "$name" \
     --epochs "$EP" --batch "$BATCH" --workers "$W" --device "$DEVICE" \
     --box-source "$box" --select-by auc --seed "$SEED" $args "${resume[@]}" "${sync[@]}" \
+    "${performance[@]}" --log-every "$LOG_EVERY" \
     2>&1 | tee -a "$log"
 }
 
@@ -281,7 +287,7 @@ PY
   sync_diagnostics
 }
 
-echo "[M3 paper v2] profile=$PROFILE scope=$SCOPE epochs=$EP batch=$BATCH workers=$W"
+echo "[M3 paper v2] profile=$PROFILE scope=$SCOPE epochs=$EP batch=$BATCH workers=$W amp=$AMP data_parallel=$DATA_PARALLEL"
 echo "[M3 paper v2] features=$FEAT labels=$LABELS runs=$RUNS"
 
 if [[ "$SCOPE" != "eval" ]]; then

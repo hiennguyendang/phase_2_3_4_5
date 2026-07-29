@@ -32,7 +32,7 @@ _LABEL_KEYS = ("region_concepts", "region_chexpert", "image_chexpert", "present_
 def to_device(batch: dict, device) -> dict:
     out = dict(batch)
     for k in ("grid", "global", *_LABEL_KEYS):
-        out[k] = batch[k].to(device)
+        out[k] = batch[k].to(device, non_blocking=True)
     return out
 
 
@@ -75,6 +75,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--workers", type=int, default=2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", default="cuda")
+    p.add_argument("--amp", action=argparse.BooleanOptionalAction, default=False,
+                   help="use CUDA FP16 autocast + GradScaler (recommended on T4)")
+    p.add_argument("--data-parallel", action=argparse.BooleanOptionalAction, default=False,
+                   help="split each batch across every visible CUDA GPU")
+    p.add_argument("--log-every", type=int, default=100,
+                   help="print within-epoch progress every N batches (0 disables it)")
     p.add_argument("--resume", action="store_true", help="continue from last.pt (pulled from Drive if --sync-remote)")
     p.add_argument("--sync-remote", default=None, help="rclone remote, e.g. dhint:CHEX-DATA/m3_runs")
     p.add_argument("--sync-every", type=int, default=0, help="also push every N steps (0 = each epoch only)")
@@ -126,6 +132,9 @@ def main() -> int:
     name = args.name or f"m3_{args.mode}"
     run_dir = args.out / name
     run_dir.mkdir(parents=True, exist_ok=True)
+    device = torch.device(args.device)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise SystemExit("[ERROR] CUDA was requested but torch.cuda.is_available() is false")
 
     train_ds = M3Dataset(args.labels_dir, args.features_root, "train", box_source=args.box_source)
     val_ds = M3Dataset(args.labels_dir, args.features_root, "val", box_source=args.box_source)
@@ -148,20 +157,40 @@ def main() -> int:
                 "LAMBDA_CONCEPT": config.LAMBDA_CONCEPT, "LAMBDA_REGION_CHEX": config.LAMBDA_REGION_CHEX,
                 "LAMBDA_IMAGE_CHEX": config.LAMBDA_IMAGE_CHEX}}, indent=2), encoding="utf-8")
 
-    tl = DataLoader(train_ds, batch_size=args.batch, shuffle=True,
-                    num_workers=args.workers, collate_fn=collate, drop_last=True)
-    vl = DataLoader(val_ds, batch_size=args.batch, num_workers=args.workers, collate_fn=collate)
+    loader_kw = {
+        "num_workers": args.workers,
+        "collate_fn": collate,
+        "pin_memory": device.type == "cuda",
+    }
+    if args.workers > 0:
+        loader_kw.update(persistent_workers=True, prefetch_factor=4)
+    tl = DataLoader(train_ds, batch_size=args.batch, shuffle=True, drop_last=True, **loader_kw)
+    vl = DataLoader(val_ds, batch_size=args.batch, **loader_kw)
 
-    model = M.build_model(feat_dim, args.mode).to(args.device)
+    base_model = M.build_model(feat_dim, args.mode).to(device)
     if (args.mode == "B" and config.DISEASE_HEAD in {"faithful", "nonneg"}
-            and hasattr(model.disease_head, "initialize_bias_from_prevalence")):
+            and hasattr(base_model.disease_head, "initialize_bias_from_prevalence")):
         labels = np.asarray(train_ds.rx).reshape(-1, C.NUM_CHEX)
         pos = (labels == 1).sum(0).astype(np.float64)
         neg = (labels == 0).sum(0).astype(np.float64)
         prevalence = (pos + 1.0) / (pos + neg + 2.0)
-        model.disease_head.initialize_bias_from_prevalence(
-            torch.tensor(prevalence, dtype=torch.float32, device=args.device))
+        base_model.disease_head.initialize_bias_from_prevalence(
+            torch.tensor(prevalence, dtype=torch.float32, device=device))
         print("[faithful-init] edge=%.4f region-prior bias initialized" % config.FAITHFUL_EDGE_INIT)
+    gpu_count = torch.cuda.device_count() if device.type == "cuda" else 0
+    if args.data_parallel and gpu_count > 1:
+        model = torch.nn.DataParallel(base_model, device_ids=list(range(gpu_count)))
+        print(f"[device] DataParallel on {gpu_count} GPUs; global batch={args.batch} "
+              f"(~{args.batch / gpu_count:g}/GPU)")
+    else:
+        model = base_model
+        if args.data_parallel:
+            print(f"[device] data-parallel requested but only {gpu_count} CUDA GPU is visible; using {device}")
+        else:
+            print(f"[device] {device}; global batch={args.batch}")
+    amp_enabled = bool(args.amp and device.type == "cuda")
+    scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
+    print(f"[precision] AMP fp16={'on' if amp_enabled else 'off'}")
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
@@ -169,7 +198,7 @@ def main() -> int:
     if config.USE_POS_WEIGHT:                    # RADAR log-scale pos_weight (spec 3.6)
         pw = {"image": pos_weight_logscale(train_ds.ic, C.NUM_CHEX, args.device),
               "region": pos_weight_logscale(train_ds.rx, C.NUM_CHEX, args.device),
-              "concept": pos_weight_logscale(train_ds.rc, C.NUM_CONCEPTS, args.device)}
+              "concept": pos_weight_logscale(train_ds.rc, C.NUM_CONCEPTS, device)}
         print("[pos_weight] image med=%.2f region med=%.2f concept med=%.2f"
               % (pw["image"].median(), pw["region"].median(), pw["concept"].median()))
 
@@ -185,9 +214,11 @@ def main() -> int:
             _rclone("copy", remote, str(run_dir), "--quiet")
         last = run_dir / "last.pt"
         if last.exists():
-            ck = torch.load(last, map_location=args.device)
-            model.load_state_dict(ck["model"]); opt.load_state_dict(ck["opt"])
+            ck = torch.load(last, map_location=device)
+            base_model.load_state_dict(ck["model"]); opt.load_state_dict(ck["opt"])
             sched.load_state_dict(ck["sched"]); start_epoch = ck["epoch"] + 1
+            if ck.get("scaler") is not None:
+                scaler.load_state_dict(ck["scaler"])
             best = ck.get("best", -1.0)
             print(f"[resume] from epoch {start_epoch} (best so far {best:.4f})")
         else:
@@ -198,28 +229,44 @@ def main() -> int:
         t0 = time.time()
         model.train()
         running = {}
-        for batch in tl:
+        for batch_idx, batch in enumerate(tl, start=1):
             b = to_device(batch, args.device)
-            out = model(b["grid"], b["global"], b["present_mask"], b["boxes"])
-            loss, parts = compute_losses(out, b, pw)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp_enabled):
+                out = model(b["grid"], b["global"], b["present_mask"], b["boxes"])
+                loss, parts = compute_losses(out, b, pw)
+            opt.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
             for k, v in parts.items():
                 running[k] = running.get(k, 0.0) + v
             step += 1
+            if args.log_every and (batch_idx == 1 or batch_idx % args.log_every == 0):
+                elapsed = max(time.time() - t0, 1e-6)
+                seen = batch_idx * args.batch
+                eta_min = (len(tl) - batch_idx) * elapsed / batch_idx / 60.0
+                print(f"epoch {epoch + 1:3}/{args.epochs} | batch {batch_idx:,}/{len(tl):,} "
+                      f"({100.0 * batch_idx / max(1, len(tl)):5.1f}%) | "
+                      f"{seen / elapsed:,.1f} img/s | ETA {eta_min:.1f} min | "
+                      f"loss {running.get('total', 0)/batch_idx:.4f}",
+                      flush=True)
             if args.sync_every and step % args.sync_every == 0:
-                torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
+                # This is a safety checkpoint inside the epoch.  Mark only the
+                # previous epoch complete so resume repeats, rather than skips,
+                # the interrupted epoch.
+                torch.save({"model": base_model.state_dict(), "opt": opt.state_dict(),
                             "sched": sched.state_dict(), "feat_dim": feat_dim, "mode": args.mode,
                             "head_type": args.head_type, "use_global": args.use_global,
                             "box_source": args.box_source, "seed": args.seed,
-                            "cfg": config.snapshot(), "epoch": epoch, "best": best}, run_dir / "last.pt")
+                            "cfg": config.snapshot(), "epoch": epoch - 1, "best": best,
+                            "scaler": scaler.state_dict() if amp_enabled else None,
+                            "interrupted_epoch": epoch}, run_dir / "last.pt")
                 push()
         lr_now = opt.param_groups[0]["lr"]
         sched.step()
         n = max(1, len(tl))
         if len(val_ds) > 0:
-            res = evaluate(model, vl, args.device)
+            res = evaluate(model, vl, device)
             f1 = res["image_f1_macro"]
             sel = res["image_auc_macro"] if args.select_by == "auc" else f1   # checkpoint selector
             print(f"epoch {epoch + 1:3}/{args.epochs} | loss {running.get('total', 0)/n:.4f} "
@@ -248,11 +295,12 @@ def main() -> int:
         with open(run_dir / "metrics.jsonl", "a", encoding="utf-8") as _mf:
             _mf.write(json.dumps(_nan_to_none(row)) + "\n")
 
-        ckpt = {"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
+        ckpt = {"model": base_model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                 "feat_dim": feat_dim, "mode": args.mode, "head_type": args.head_type,
                 "use_global": args.use_global, "box_source": args.box_source, "seed": args.seed,
                 "cfg": config.snapshot(), "epoch": epoch,
-                "val_f1": f1, "val_auc": res["image_auc_macro"], "best": best}
+                "val_f1": f1, "val_auc": res["image_auc_macro"], "best": best,
+                "scaler": scaler.state_dict() if amp_enabled else None}
         torch.save(ckpt, run_dir / "last.pt")
         if is_best:
             torch.save(ckpt, run_dir / "best.pt")

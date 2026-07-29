@@ -152,8 +152,13 @@ phase_3/run_paper_m3_v2.sh
 
 The main M3 contract is mode B, faithful graph head, detached concept-to-disease
 path, no global disease bypass, normalized LSE aggregation, detector boxes, and
-derived No Finding. The launcher stores the architecture snapshot in each
-checkpoint and automatically resumes from last.pt.
+derived No Finding. On the Kaggle dual-T4 runtime, the main row uses one
+DataParallel process across both GPUs, FP16 AMP, global batch 64, four loader
+workers, pinned/prefetched feature batches, and progress output every 50
+batches. The launcher stores the architecture snapshot in each checkpoint and
+automatically resumes from last.pt. An intra-epoch safety checkpoint repeats
+the interrupted epoch on resume; a checkpoint written after validation resumes
+at the next epoch.
 
 ### M4 training and evaluation
 
@@ -314,11 +319,12 @@ This is not required to train M3 or M4.
 Create four new notebooks. They may share helper cells, but each notebook must
 be restartable and must save outputs before the Kaggle session ends.
 
-Target a single Kaggle GPU (preferably T4 or another CUDA GPU with enough
-memory), keep DataLoader workers at 2--4, and start M3/M4 with conservative
-batch sizes such as 8--16. Do not copy the H100-mini batch/worker profile into
-Kaggle. Split the run matrix across sessions and persist every run directory
-before the session expires.
+The M3 main row targets Kaggle's `2 x T4` accelerator and must assert that two
+CUDA devices are visible. It uses global batch 64 (about 32 samples per GPU)
+with AMP. Remaining independent ablations run two at a time, one process per
+T4. M4 keeps its own phase-specific memory benchmark; do not copy M3's batch
+setting into M4 without measuring it. Persist every run directory before the
+session expires.
 
 ### Notebook 1: phase2_infer_boxes_v2_kaggle.ipynb
 
@@ -346,14 +352,19 @@ Cells:
 2. Copy m3_labels to /kaggle/working/m3_labels_detector_v2 and place the new
    detector arrays there; never mutate /kaggle/input.
 3. Run the launcher preflight and a one-batch model/feature smoke test.
-4. Run run_paper_m3_v2.sh --profile local4060 --scope main first.
+4. Run run_paper_m3_v2.sh --profile local4060 --scope main first. The notebook
+   sets AMP=1 and DATA_PARALLEL=1, so the single Python process uses both T4s;
+   one visible process does not imply one GPU. It prints the two device names
+   and reports within-epoch throughput every 50 batches.
 5. The main launcher automatically regenerates stale validation dumps, fits
    pair-specific disease thresholds and concept gates, writes both CSV audits,
    and creates `m3v2_vera_graph_lse_det.calibration.SUCCESS.json` only on
-   completion. Training checkpoints sync every epoch and completed diagnostics
-   sync after each split, so a dead session can resume without discarding prior
-   work. Save best.pt, last.pt, logs, metrics, diagnostics, predictions,
-   regional audit, faithfulness JSON, the four calibration outputs, and marker.
+   completion. Training checkpoints sync every 300 batches and every completed
+   epoch; completed diagnostics sync after each split. A dead session therefore
+   resumes from the last completed epoch (repeating a partially completed epoch)
+   rather than silently skipping it. Save best.pt, last.pt, logs, metrics,
+   diagnostics, predictions, regional audit, faithfulness JSON, the four
+   calibration outputs, and marker.
 6. Resume with --scope all to obtain the eight remaining retained rows. If a
    Kaggle session is too short, expose a RUN_SCOPE/RUN_INDEX setting so one or
    two rows can be run per session while preserving the same run directory.
