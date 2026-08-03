@@ -7,6 +7,8 @@ export PYTHONUNBUFFERED=1
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+PIPELINE_TOOLS="$SCRIPT_DIR/pipeline_tools.py"
+RESULT_COLLECTOR="$SCRIPT_DIR/collect_results.py"
 
 # Optional persistent, non-secret server configuration. This is loaded before
 # defaults so start/status/resume in later SSH sessions resolve the same tree.
@@ -81,6 +83,9 @@ usage() {
   cat <<'EOF'
 Usage: bash server_hoang/run_all.sh COMMAND
 
+First server setup: run server_hoang/download_kaggle.py to download inputs and
+generate server_hoang/server.env before using preflight/start.
+
 Commands:
   preflight   Validate environment, GPUs, source and all uploaded inputs.
   start       Preflight, then start detached with nohup+setsid (safe after SSH closes).
@@ -130,14 +135,7 @@ resolve_gpus() {
 }
 
 sha256_file() {
-  "$PY" - "$1" <<'PY'
-import hashlib, sys
-h = hashlib.sha256()
-with open(sys.argv[1], "rb") as f:
-    for block in iter(lambda: f.read(8 << 20), b""):
-        h.update(block)
-print(h.hexdigest())
-PY
+  "$PY" "$PIPELINE_TOOLS" sha256 "$1"
 }
 
 preflight() {
@@ -159,6 +157,8 @@ preflight() {
   require_file "$REPO_ROOT/phase_3/scripts/3-boxes_from_pred.py"
   require_file "$REPO_ROOT/phase_3/run_paper_m3_v2.sh"
   require_file "$REPO_ROOT/phase_4/run_paper_m4_v2.sh"
+  require_file "$PIPELINE_TOOLS"
+  require_file "$RESULT_COLLECTOR"
   require_file "$REPO_ROOT/data/m3_concept_space.json"
   require_file "$REPO_ROOT/phase_3/src/m3_concept_space.json"
   require_file "$REPO_ROOT/phase_4/src/m3_concept_space.json"
@@ -182,24 +182,7 @@ preflight() {
   [[ -n "$(find "$IMAGE_ROOT" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) -print -quit)" ]] \
     || die "no image under $IMAGE_ROOT"
 
-  "$PY" - "$GPU_IDS" "$REPO_ROOT" <<'PY'
-import importlib, json, sys
-from pathlib import Path
-for module in ("torch", "numpy", "ultralytics", "sklearn", "matplotlib", "pandas"):
-    importlib.import_module(module)
-import torch
-ids = [x for x in sys.argv[1].split(",") if x]
-if not torch.cuda.is_available():
-    raise SystemExit("[ERROR] torch cannot access CUDA")
-print("torch:", torch.__version__, "visible CUDA devices:", torch.cuda.device_count())
-for i in range(torch.cuda.device_count()):
-    print("  cuda", i, torch.cuda.get_device_name(i))
-root = Path(sys.argv[2])
-copies = [root / "data/m3_concept_space.json", root / "phase_3/src/m3_concept_space.json",
-          root / "phase_4/src/m3_concept_space.json"]
-objects = [json.loads(p.read_text(encoding="utf-8-sig")) for p in copies]
-assert all(x == objects[0] for x in objects[1:]), "concept-space copies differ"
-PY
+  "$PY" "$PIPELINE_TOOLS" preflight --gpu-ids "$GPU_IDS" --repo-root "$REPO_ROOT"
 
   local got_sha
   got_sha="$(sha256_file "$YOLO_WEIGHTS")"
@@ -220,14 +203,8 @@ write_stage() {
 mark_stage_complete() {
   local stage="$1"
   mkdir -p "$STATE_DIR/stages"
-  "$PY" - "$STATE_DIR/stages/$stage.SUCCESS.json" "$stage" "$(timestamp)" <<'PY'
-import json, os, sys
-from pathlib import Path
-path, stage, completed = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-tmp = path.with_suffix(path.suffix + ".tmp")
-tmp.write_text(json.dumps({"stage": stage, "status": "complete", "completed_at": completed}, indent=2) + "\n")
-os.replace(tmp, path)
-PY
+  "$PY" "$PIPELINE_TOOLS" mark-stage \
+    --dest "$STATE_DIR/stages/$stage.SUCCESS.json" --stage "$stage" --completed-at "$(timestamp)"
 }
 
 stage_complete() { [[ -s "$STATE_DIR/stages/$1.SUCCESS.json" ]]; }
@@ -236,124 +213,12 @@ collect_results() {
   resolve_python
   mkdir -p "$RESULTS_DIR"
   (
-  exec 8>"$RESULTS_DIR/collector.lock"
-  flock -w 30 8 || exit 0
-  OUTPUT_ROOT="$OUTPUT_ROOT" RUNS_ROOT="$RUNS_ROOT" M2_ROOT="$M2_ROOT" \
-    M3_DIAGDIR="$M3_DIAGDIR" M4_DIAGDIR="$M4_DIAGDIR" RESULTS_DIR="$RESULTS_DIR" \
-    TARGET_M3_EPOCHS="$M3_EPOCHS" TARGET_M4_EPOCHS="$M4_EPOCHS" \
-    "$PY" - <<'PY'
-import csv, datetime as dt, json, math, os
-from pathlib import Path
-
-import torch
-
-runs = Path(os.environ["RUNS_ROOT"])
-m2 = Path(os.environ["M2_ROOT"])
-m3diag = Path(os.environ["M3_DIAGDIR"])
-m4diag = Path(os.environ["M4_DIAGDIR"])
-out = Path(os.environ["RESULTS_DIR"])
-targets = {"M3": int(os.environ["TARGET_M3_EPOCHS"]), "M4": int(os.environ["TARGET_M4_EPOCHS"])}
-now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
-m3_names = [
-    "m3v2_vera_graph_lse_det", "m3v2_no_concept_det", "m3v2_concept_mlp_det",
-    "m3v2_graph_global_fusion_det", "m3v2_global_only_det",
-    "m3v2_graph_attention_det", "m3v2_graph_mean_det", "m3v2_graph_max_det",
-    "m3v2_vera_graph_lse_gt",
-]
-
-def load_json(path):
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-def load_ckpt(path):
-    try:
-        return torch.load(path, map_location="cpu", weights_only=False)
-    except Exception:
-        return {}
-
-def number(value):
-    try:
-        value = float(value)
-        return "" if not math.isfinite(value) else f"{value:.6f}"
-    except Exception:
-        return ""
-
-rows = []
-m2_success = load_json(m2 / "M2.SUCCESS.json")
-rows.append({
-    "stage": "M2", "run": "yolo29_full_inference", "status": "complete" if m2_success else "pending",
-    "epochs": "", "target_epochs": "", "box_source": "detector",
-    "val_primary": "", "test_primary": "", "val_aux": "", "test_aux": "",
-    "best_checkpoint": str(m2 / "predictions.jsonl") if m2_success else "", "updated_at": now,
-})
-
-run_dirs = {p.name: p for p in runs.glob("*") if p.is_dir()} if runs.exists() else {}
-names = list(m3_names) + sorted(n for n in run_dirs if n.startswith("m4v2_"))
-for name in names:
-    stage = "M3" if name.startswith("m3v2_") else "M4"
-    run = run_dirs.get(name, runs / name)
-    last = load_ckpt(run / "last.pt")
-    best_path = run / "best.pt"
-    best = load_ckpt(best_path)
-    epochs = int(last.get("epoch", -1)) + 1 if last else 0
-    target = targets[stage]
-    status = "complete" if epochs >= target and best_path.is_file() else ("running" if last or run.exists() else "pending")
-    val = load_json((m3diag if stage == "M3" else m4diag) / f"{name}.val.json")
-    test = load_json((m3diag if stage == "M3" else m4diag) / f"{name}.test.json")
-    if stage == "M3":
-        val_primary = val.get("image_auc_macro", best.get("val_auc"))
-        test_primary = test.get("image_auc_macro")
-        val_aux = val.get("image_f1_macro", best.get("val_f1"))
-        test_aux = test.get("image_f1_macro")
-        box = best.get("box_source", last.get("box_source", ""))
-    else:
-        val_primary = val.get("change_f1_macro", best.get("val_change_f1"))
-        test_primary = test.get("change_f1_macro")
-        val_aux = val.get("prog_f1_macro", best.get("val_f1"))
-        test_aux = test.get("prog_f1_macro")
-        box = best.get("box_source", last.get("box_source", ""))
-    rows.append({
-        "stage": stage, "run": name, "status": status, "epochs": epochs,
-        "target_epochs": target, "box_source": box, "val_primary": number(val_primary),
-        "test_primary": number(test_primary), "val_aux": number(val_aux),
-        "test_aux": number(test_aux), "best_checkpoint": str(best_path) if best_path.is_file() else "",
-        "updated_at": now,
-    })
-
-fields = ["stage", "run", "status", "epochs", "target_epochs", "box_source",
-          "val_primary", "test_primary", "val_aux", "test_aux", "best_checkpoint", "updated_at"]
-csv_tmp = out / "runs.csv.tmp"
-with csv_tmp.open("w", newline="", encoding="utf-8") as f:
-    writer = csv.DictWriter(f, fieldnames=fields)
-    writer.writeheader(); writer.writerows(rows)
-os.replace(csv_tmp, out / "runs.csv")
-
-md = ["# VERA server result collector", "", f"Updated: `{now}`", "",
-      "For M3, primary = image macro-AUC and auxiliary = image macro-F1. "
-      "For M4, primary = change-only macro-F1 and auxiliary = progression macro-F1.", "",
-      "| Stage | Run | Status | Epoch | Box | Val primary | Test primary | Val aux | Test aux |",
-      "|---|---|---:|---:|---|---:|---:|---:|---:|"]
-for r in rows:
-    epoch = f"{r['epochs']}/{r['target_epochs']}" if r["target_epochs"] else "-"
-    md.append(f"| {r['stage']} | `{r['run']}` | {r['status']} | {epoch} | {r['box_source']} | "
-              f"{r['val_primary'] or '-'} | {r['test_primary'] or '-'} | "
-              f"{r['val_aux'] or '-'} | {r['test_aux'] or '-'} |")
-md_tmp = out / "runs.md.tmp"
-md_tmp.write_text("\n".join(md) + "\n", encoding="utf-8")
-os.replace(md_tmp, out / "runs.md")
-
-summary = {
-    "updated_at": now,
-    "counts": {s: sum(r["status"] == s for r in rows) for s in ("complete", "running", "pending")},
-    "rows": rows,
-}
-js_tmp = out / "summary.json.tmp"
-js_tmp.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-os.replace(js_tmp, out / "summary.json")
-print(f"[collector] {now}: {summary['counts']} -> {out / 'runs.md'}")
-PY
+    exec 8>"$RESULTS_DIR/collector.lock"
+    flock -w 30 8 || exit 0
+    "$PY" "$RESULT_COLLECTOR" \
+      --runs-root "$RUNS_ROOT" --m2-root "$M2_ROOT" \
+      --m3-diagdir "$M3_DIAGDIR" --m4-diagdir "$M4_DIAGDIR" \
+      --results-dir "$RESULTS_DIR" --m3-epochs "$M3_EPOCHS" --m4-epochs "$M4_EPOCHS"
   )
 }
 
@@ -381,46 +246,20 @@ prepare_m3_labels() {
 write_m2_contract() {
   local contract="$M2_ROOT/contract.json"
   mkdir -p "$M2_ROOT"
-  "$PY" - "$contract" "$YOLO_WEIGHTS" "$M3_LABELS_WORK/manifest.jsonl" "$IMAGE_ROOT" \
-    "$YOLO_IMGSZ" "$YOLO_CONF" "$YOLO_IOU" "$M2_BATCH" "$M2_NUM_SHARDS" <<'PY'
-import hashlib, json, os, sys
-from pathlib import Path
-def sha(path):
-    h=hashlib.sha256()
-    with open(path,"rb") as f:
-        for b in iter(lambda:f.read(8<<20),b""): h.update(b)
-    return h.hexdigest()
-dest, weights, manifest, images = map(Path, sys.argv[1:5])
-want = {
-    "schema_version": 1, "weights": str(weights.resolve()), "weights_sha256": sha(weights),
-    "manifest": str(manifest.resolve()), "manifest_sha256": sha(manifest),
-    "image_root": str(images.resolve()), "imgsz": int(sys.argv[5]), "conf": float(sys.argv[6]),
-    "iou": float(sys.argv[7]), "batch": int(sys.argv[8]), "num_shards": int(sys.argv[9]),
-}
-if dest.exists():
-    got=json.loads(dest.read_text(encoding="utf-8"))
-    if got != want:
-        raise SystemExit(f"[ERROR] M2 contract changed. Preserve the old OUTPUT_ROOT and choose a new one.\nold={got}\nnew={want}")
-else:
-    tmp=dest.with_suffix(".json.tmp"); tmp.write_text(json.dumps(want,indent=2)+"\n"); os.replace(tmp,dest)
-print("[M2 contract]", json.dumps(want, indent=2))
-PY
+  "$PY" "$PIPELINE_TOOLS" m2-contract \
+    --dest "$contract" --weights "$YOLO_WEIGHTS" \
+    --manifest "$M3_LABELS_WORK/manifest.jsonl" --image-root "$IMAGE_ROOT" \
+    --imgsz "$YOLO_IMGSZ" --conf "$YOLO_CONF" --iou "$YOLO_IOU" \
+    --batch "$M2_BATCH" --num-shards "$M2_NUM_SHARDS"
 }
 
 m2_shard_complete() {
   local shard="$1" marker="$M2_ROOT/shards/shard_$(printf '%04d' "$shard")/SUCCESS.json"
   [[ -s "$marker" ]] || return 1
-  "$PY" - "$marker" "$M2_ROOT/shards/shard_$(printf '%04d' "$shard")/predictions.jsonl" \
-    "$M3_LABELS_WORK/manifest.jsonl" "$shard" "$M2_NUM_SHARDS" <<'PY' >/dev/null 2>&1
-import json, sys
-from pathlib import Path
-marker, pred, manifest = map(Path, sys.argv[1:4]); shard, nshards = map(int, sys.argv[4:6])
-n=len({str(json.loads(x)["image_id"]) for x in manifest.read_text(encoding="utf-8-sig").splitlines() if x.strip()})
-expected=max(0,(n-shard+nshards-1)//nshards)
-got=sum(1 for x in pred.open(encoding="utf-8") if x.strip())
-m=json.loads(marker.read_text(encoding="utf-8"))
-assert m.get("status")=="complete" and m.get("rows")==got==expected
-PY
+  "$PY" "$PIPELINE_TOOLS" shard-check --marker "$marker" \
+    --predictions "$M2_ROOT/shards/shard_$(printf '%04d' "$shard")/predictions.jsonl" \
+    --manifest "$M3_LABELS_WORK/manifest.jsonl" --shard "$shard" \
+    --num-shards "$M2_NUM_SHARDS" >/dev/null 2>&1
 }
 
 run_m2_gpu_worker() {
@@ -442,69 +281,22 @@ run_m2_gpu_worker() {
       --batch "$M2_BATCH" --device 0 --no-per-image \
       --shard-index "$shard" --num-shards "$M2_NUM_SHARDS" \
       2>&1 | tee -a "$log"
-    "$PY" - "$out/predictions.jsonl" "$M3_LABELS_WORK/manifest.jsonl" "$shard" \
-      "$M2_NUM_SHARDS" "$out/SUCCESS.json" <<'PY'
-import json, os, sys
-from pathlib import Path
-pred, manifest, dest = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[5])
-shard, nshards = int(sys.argv[3]), int(sys.argv[4])
-n=len({str(json.loads(x)["image_id"]) for x in manifest.read_text(encoding="utf-8-sig").splitlines() if x.strip()})
-expected=max(0,(n-shard+nshards-1)//nshards)
-rows=sum(1 for x in pred.open(encoding="utf-8") if x.strip())
-if rows != expected: raise SystemExit(f"[ERROR] shard {shard}: rows={rows}, expected={expected}")
-tmp=dest.with_suffix(".json.tmp")
-tmp.write_text(json.dumps({"status":"complete","shard":shard,"num_shards":nshards,"rows":rows},indent=2)+"\n")
-os.replace(tmp,dest)
-PY
+    "$PY" "$PIPELINE_TOOLS" shard-mark --predictions "$out/predictions.jsonl" \
+      --manifest "$M3_LABELS_WORK/manifest.jsonl" --shard "$shard" \
+      --num-shards "$M2_NUM_SHARDS" --dest "$out/SUCCESS.json"
   done
 }
 
 merge_m2_shards() {
-  "$PY" - "$M2_ROOT" "$M3_LABELS_WORK/manifest.jsonl" "$M2_NUM_SHARDS" <<'PY'
-import json, os, sys
-from pathlib import Path
-root, manifest, nshards = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3])
-expected={str(json.loads(x)["image_id"]) for x in manifest.read_text(encoding="utf-8-sig").splitlines() if x.strip()}
-seen=set(); tmp=root/"predictions.jsonl.tmp"
-with tmp.open("w",encoding="utf-8") as dst:
-    for shard in range(nshards):
-        src=root/"shards"/f"shard_{shard:04d}"/"predictions.jsonl"
-        for line in src.open(encoding="utf-8"):
-            if not line.strip(): continue
-            rec=json.loads(line); iid=str(rec["image_id"])
-            if iid in seen: raise SystemExit(f"[ERROR] duplicate M2 image_id during merge: {iid}")
-            seen.add(iid); dst.write(line if line.endswith("\n") else line+"\n")
-missing=expected-seen; extra=seen-expected
-if missing or extra:
-    raise SystemExit(f"[ERROR] M2 merge coverage mismatch: missing={len(missing)} extra={len(extra)} first_missing={sorted(missing)[:5]}")
-os.replace(tmp,root/"predictions.jsonl")
-print(f"[M2 merge] {len(seen):,} unique predictions -> {root/'predictions.jsonl'}")
-PY
+  "$PY" "$PIPELINE_TOOLS" merge-shards --root "$M2_ROOT" \
+    --manifest "$M3_LABELS_WORK/manifest.jsonl" --num-shards "$M2_NUM_SHARDS"
 }
 
 write_detector_provenance() {
-  "$PY" - "$YOLO_WEIGHTS" "$M2_ROOT/predictions.jsonl" "$M3_LABELS_WORK" \
-    "$YOLO_IMGSZ" "$YOLO_CONF" "$YOLO_IOU" "$M2_BATCH" "$M2_NUM_SHARDS" <<'PY'
-import hashlib, json, os, sys
-from pathlib import Path
-import numpy as np
-def sha(path):
-    h=hashlib.sha256()
-    with open(path,"rb") as f:
-        for b in iter(lambda:f.read(8<<20),b""): h.update(b)
-    return h.hexdigest()
-weights, pred, labels = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
-boxes, mask = labels/"boxes_det.npy", labels/"present_mask_det.npy"
-m=np.load(mask,mmap_mode="r")
-payload={"schema_version":2,"detector_checkpoint":str(weights),"detector_checkpoint_sha256":sha(weights),
- "prediction_jsonl":str(pred),"prediction_jsonl_sha256":sha(pred),"manifest_rows":int(m.shape[0]),
- "imgsz":int(sys.argv[4]),"conf":float(sys.argv[5]),"iou":float(sys.argv[6]),"batch":int(sys.argv[7]),
- "num_shards":int(sys.argv[8]),"coordinate_frame":448,"boxes_det_sha256":sha(boxes),
- "present_mask_det_sha256":sha(mask),"shape":list(m.shape),"mean_regions_per_image":float(m.sum(axis=1).mean())}
-dest=labels/"detector_provenance.json"; tmp=dest.with_suffix(".json.tmp")
-tmp.write_text(json.dumps(payload,indent=2)+"\n"); os.replace(tmp,dest)
-print(json.dumps(payload,indent=2))
-PY
+  "$PY" "$PIPELINE_TOOLS" detector-provenance \
+    --weights "$YOLO_WEIGHTS" --predictions "$M2_ROOT/predictions.jsonl" \
+    --labels "$M3_LABELS_WORK" --imgsz "$YOLO_IMGSZ" --conf "$YOLO_CONF" \
+    --iou "$YOLO_IOU" --batch "$M2_BATCH" --num-shards "$M2_NUM_SHARDS"
 }
 
 run_m2() {
@@ -520,11 +312,7 @@ run_m2() {
   write_stage m2_detector_inference
   prepare_m3_labels
   if [[ -z "${M2_NUM_SHARDS:-}" && -s "$M2_ROOT/contract.json" ]]; then
-    M2_NUM_SHARDS="$($PY - "$M2_ROOT/contract.json" <<'PY'
-import json,sys
-print(int(json.load(open(sys.argv[1],encoding="utf-8"))["num_shards"]))
-PY
-)"
+    M2_NUM_SHARDS="$($PY "$PIPELINE_TOOLS" contract-num-shards --contract "$M2_ROOT/contract.json")"
   fi
   M2_NUM_SHARDS="${M2_NUM_SHARDS:-$((GPU_COUNT * M2_SHARDS_PER_GPU))}"
   ((M2_NUM_SHARDS >= GPU_COUNT)) || die "M2_NUM_SHARDS must be >= GPU count"
@@ -548,19 +336,8 @@ PY
   cp -f "$M3_LABELS_WORK/detector_provenance.json" "$M2_ROOT/detector_provenance.json"
   cp -f "$M3_LABELS_WORK/boxes_det.npy" "$M2_ROOT/boxes_det.npy"
   cp -f "$M3_LABELS_WORK/present_mask_det.npy" "$M2_ROOT/present_mask_det.npy"
-  "$PY" - "$M2_ROOT/M2.SUCCESS.json" "$M2_ROOT/predictions.jsonl" "$M3_LABELS_WORK" <<'PY'
-import hashlib,json,os,sys
-from pathlib import Path
-def sha(p):
- h=hashlib.sha256()
- with open(p,"rb") as f:
-  for b in iter(lambda:f.read(8<<20),b""):h.update(b)
- return h.hexdigest()
-dest,pred,labels=Path(sys.argv[1]),Path(sys.argv[2]),Path(sys.argv[3])
-payload={"status":"complete","predictions_sha256":sha(pred),"boxes_det_sha256":sha(labels/'boxes_det.npy'),
- "present_mask_det_sha256":sha(labels/'present_mask_det.npy')}
-tmp=dest.with_suffix('.json.tmp');tmp.write_text(json.dumps(payload,indent=2)+'\n');os.replace(tmp,dest)
-PY
+  "$PY" "$PIPELINE_TOOLS" m2-success --dest "$M2_ROOT/M2.SUCCESS.json" \
+    --predictions "$M2_ROOT/predictions.jsonl" --labels "$M3_LABELS_WORK"
   mark_stage_complete m2
   collect_results
 }
@@ -571,27 +348,11 @@ m4_remote() { [[ -n "$REMOTE_ROOT" ]] && printf '%s/m4_runs' "${REMOTE_ROOT%/}" 
 write_run_manifest() {
   local git_commit="unavailable"
   git_commit="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf unavailable)"
-  "$PY" - "$STATE_DIR/run_manifest.json" "$git_commit" "$REPO_ROOT" "$INPUT_ROOT" "$OUTPUT_ROOT" \
-    "$GPU_IDS" "$M3_EPOCHS" "$M3_BATCH" "$M4_EPOCHS" "$M4_BATCH" "$(timestamp)" <<'PY'
-import json, os, sys
-from pathlib import Path
-dest=Path(sys.argv[1])
-payload={"schema_version":1,"git_commit":sys.argv[2],"repo_root":sys.argv[3],
- "input_root":sys.argv[4],"output_root":sys.argv[5],"gpu_ids":sys.argv[6],
- "m3_epochs":int(sys.argv[7]),"m3_batch_per_run":int(sys.argv[8]),
- "m4_epochs":int(sys.argv[9]),"m4_batch":int(sys.argv[10]),"started_at":sys.argv[11]}
-if dest.exists():
-    previous=json.loads(dest.read_text(encoding="utf-8"))
-    immutable=("git_commit","input_root","output_root","m3_epochs","m4_epochs")
-    bad={k:(previous.get(k),payload.get(k)) for k in immutable if previous.get(k)!=payload.get(k)}
-    if bad:
-        raise SystemExit(f"[ERROR] run manifest changed for an existing output tree: {bad}. Use a new OUTPUT_ROOT.")
-    payload["first_started_at"]=previous.get("first_started_at",previous.get("started_at"))
-else:
-    payload["first_started_at"]=payload["started_at"]
-tmp=dest.with_suffix(".json.tmp");tmp.write_text(json.dumps(payload,indent=2)+"\n");os.replace(tmp,dest)
-print("[run manifest]",dest)
-PY
+  "$PY" "$PIPELINE_TOOLS" run-manifest --dest "$STATE_DIR/run_manifest.json" \
+    --git-commit "$git_commit" --repo-root "$REPO_ROOT" --input-root "$INPUT_ROOT" \
+    --output-root "$OUTPUT_ROOT" --gpu-ids "$GPU_IDS" --m3-epochs "$M3_EPOCHS" \
+    --m3-batch "$M3_BATCH" --m4-epochs "$M4_EPOCHS" --m4-batch "$M4_BATCH" \
+    --started-at "$(timestamp)"
 }
 
 run_m3_gpu_worker() {
@@ -751,10 +512,7 @@ show_status() {
   [[ -s "$STATE_DIR/PIPELINE.FAILED" && "$state" != running ]] && state="failed"
   printf 'state: %s\npid: %s\nstage: %s\noutput: %s\nlog: %s\n' "$state" "$pid" "$stage" "$OUTPUT_ROOT" "$SUPERVISOR_LOG"
   if [[ -s "$RESULTS_DIR/summary.json" ]]; then
-    "$PY" - "$RESULTS_DIR/summary.json" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1],encoding="utf-8")); print("results updated:",x.get("updated_at")); print("counts:",x.get("counts"))
-PY
+    "$PY" "$PIPELINE_TOOLS" show-summary --summary "$RESULTS_DIR/summary.json"
   fi
   [[ -s "$STATE_DIR/PIPELINE.FAILED" ]] && { echo "last failure:"; cat "$STATE_DIR/PIPELINE.FAILED"; }
   [[ -s "$SUPERVISOR_LOG" ]] && { echo "--- latest log ---"; tail -n 25 "$SUPERVISOR_LOG"; }

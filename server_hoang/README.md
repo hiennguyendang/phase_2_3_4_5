@@ -11,9 +11,10 @@ M2: infer the 29 anatomical boxes once
          run the retained paper rows, then produce final audits
 ```
 
-Use `run_all.sh`; do not manually call old notebooks or legacy run folders.
-The script is restartable and writes no generated artifact into the uploaded
-input directory.
+The mandatory order on a new server is: run `download_kaggle.py` first, then
+run `run_all.sh preflight`, and only then run `run_all.sh start`. Do not
+manually call old notebooks or legacy run folders. The pipeline is restartable
+and writes no generated artifact into the downloaded input directories.
 
 ## 1. What must be copied to the server
 
@@ -58,149 +59,88 @@ Therefore the only item not supplied by those three data datasets is the
 record the commit with `git rev-parse HEAD`. The pipeline also records it in
 `output/state/run_manifest.json`.
 
-### Download from Kaggle on the server
+### Required first step: download and configure
 
-Install the current official Kaggle CLI (its current documentation requests
-Python 3.11+):
+Hoàng must run `download_kaggle.py` **before any `run_all.sh` command**. The
+download script fixes the earlier path ambiguity: it downloads the correct
+three datasets into separate directories, discovers their real wrapper roots,
+checks all required label files and the YOLO SHA-256, and atomically generates
+`server_hoang/server.env` with the resolved absolute paths.
 
-```bash
-python3 -m pip install --upgrade kaggle
-kaggle --version
-```
-
-Authenticate with **Hoàng's own Kaggle account**. If the three datasets are
-private, first grant that account access on Kaggle; do not send or commit the
-owner's personal token. The preferred interactive method is:
+Use a persistent data disk, not `/tmp`. Reserve at least roughly 120--150 GB
+for inputs, caches, checkpoints, and diagnostics. From the repository root:
 
 ```bash
-kaggle auth login
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip kagglehub
+
+python server_hoang/download_kaggle.py \
+  --login \
+  --data-root /data/vera/kaggle_downloads \
+  --output-root /data/vera/output_server_hoang \
+  --gpu-ids 0,1
 ```
 
-For a headless server, generate an API token from Kaggle **Settings → API** and
-enter it without echoing it into shell history:
+`--login` opens kagglehub's authentication flow. Authenticate with **Hoàng's
+own Kaggle account** and grant that account access first if the datasets are
+private. Never send, log, or commit the dataset owner's token. On later runs,
+omit `--login` when the server already has valid Kaggle credentials.
+
+The downloader is safe to rerun. It reuses completed kagglehub downloads and
+always revalidates the files before updating `server.env`. Useful recovery
+options are:
 
 ```bash
-read -rsp 'Kaggle API token: ' KAGGLE_API_TOKEN
-echo
-export KAGGLE_API_TOKEN
+# Data already exists: validate paths and regenerate server.env without network.
+python server_hoang/download_kaggle.py \
+  --skip-download --data-root /data/vera/kaggle_downloads \
+  --output-root /data/vera/output_server_hoang --gpu-ids 0,1
+
+# Use only when a Kaggle download is known to be corrupt/incomplete.
+python server_hoang/download_kaggle.py \
+  --force --data-root /data/vera/kaggle_downloads \
+  --output-root /data/vera/output_server_hoang --gpu-ids 0,1
 ```
 
-The official CLI also accepts a token stored at `~/.kaggle/access_token`. Keep
-that file mode `600`. Do not put any Kaggle token in this repository,
-`server.env`, logs, or the returned output archive.
-
-Reference: [official Kaggle CLI authentication documentation](https://github.com/Kaggle/kaggle-cli/blob/main/docs/README.md#authentication).
-
-Check access before starting the large downloads:
-
-```bash
-kaggle datasets files nguynnghin/vera-v2-inputs
-kaggle datasets files nguynnghin/frozen
-kaggle datasets files nguynnghin/mimic-cxr-448
-```
-
-Download and extract each dataset into a persistent data disk, not into `/tmp`.
-Reserve at least roughly 120--150 GB for the downloaded inputs, temporary ZIP
-space, two M4 region caches, checkpoints, and diagnostics:
-
-```bash
-export VERA_DATA=/data/vera/kaggle_downloads
-mkdir -p \
-  "$VERA_DATA/vera-v2-inputs" \
-  "$VERA_DATA/frozen" \
-  "$VERA_DATA/mimic-cxr-448"
-
-kaggle datasets download -d nguynnghin/vera-v2-inputs \
-  -p "$VERA_DATA/vera-v2-inputs" --unzip
-
-kaggle datasets download -d nguynnghin/frozen \
-  -p "$VERA_DATA/frozen" --unzip
-
-kaggle datasets download -d nguynnghin/mimic-cxr-448 \
-  -p "$VERA_DATA/mimic-cxr-448" --unzip
-```
-
-These datasets intentionally retain one wrapper directory. After extraction,
-the expected roots are:
+With the published archive layout, the resolved settings will normally be:
 
 ```text
-$VERA_DATA/vera-v2-inputs/vera_v2
-$VERA_DATA/frozen/frozen
-$VERA_DATA/mimic-cxr-448/mimic-cxr-448
-```
-
-Verify them before configuring the pipeline:
-
-```bash
-export BUNDLE_ROOT="$VERA_DATA/vera-v2-inputs/vera_v2"
-export FEATURE_TREE="$VERA_DATA/frozen/frozen"
-export IMAGE_TREE="$VERA_DATA/mimic-cxr-448/mimic-cxr-448"
-
-test -f "$BUNDLE_ROOT/m2_detector/last.pt"
-test -f "$BUNDLE_ROOT/m3_labels_base/manifest.jsonl"
-test -f "$BUNDLE_ROOT/m4_labels/progression.npy"
-test -f "$BUNDLE_ROOT/m4_labels/MS_CXR_T_temporal_image_classification_v1.0.0.csv"
-test -d "$FEATURE_TREE"
-test -d "$IMAGE_TREE"
-
-sha256sum "$BUNDLE_ROOT/m2_detector/last.pt"
-find "$FEATURE_TREE" -maxdepth 1 -type f \( -name '*.pt' -o -name '*.npy' \) | wc -l
-find "$IMAGE_TREE" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | wc -l
-du -sh "$VERA_DATA"/*
-```
-
-The YOLO hash must be:
-
-```text
-71d4b4e3b173cc046fc45c7120b6cf4489c384ceaaec9f08231182108a40da56
-```
-
-The feature count should be `252287`. If a wrapper path differs, locate it with
-`find "$VERA_DATA" -name manifest.jsonl -o -name last.pt`; do not move hundreds
-of thousands of feature files merely to imitate the example path.
-
-### Persist the server settings
-
-From the repository root, create `server_hoang/server.env`. The supervisor
-loads this file automatically for `preflight`, `start`, `status`, and `resume`:
-
-```bash
-export REPO=/path/to/phase_2_3_4_5
-
-cat > "$REPO/server_hoang/server.env" <<EOF
-IMAGE_ROOT=$IMAGE_TREE
-FEATURE_ROOT=$FEATURE_TREE
-YOLO_WEIGHTS=$BUNDLE_ROOT/m2_detector/last.pt
-M3_LABELS_INPUT=$BUNDLE_ROOT/m3_labels_base
-M4_LABELS=$BUNDLE_ROOT/m4_labels
-MS_CSV=$BUNDLE_ROOT/m4_labels/MS_CXR_T_temporal_image_classification_v1.0.0.csv
+IMAGE_ROOT=/data/vera/kaggle_downloads/mimic-cxr-448/mimic-cxr-448
+FEATURE_ROOT=/data/vera/kaggle_downloads/frozen/frozen
+YOLO_WEIGHTS=/data/vera/kaggle_downloads/vera-v2-inputs/vera_v2/m2_detector/last.pt
+M3_LABELS_INPUT=/data/vera/kaggle_downloads/vera-v2-inputs/vera_v2/m3_labels_base
+M4_LABELS=/data/vera/kaggle_downloads/vera-v2-inputs/vera_v2/m4_labels
+MS_CSV=/data/vera/kaggle_downloads/vera-v2-inputs/vera_v2/m4_labels/MS_CXR_T_temporal_image_classification_v1.0.0.csv
 OUTPUT_ROOT=/data/vera/output_server_hoang
-GPU_IDS=0,1
-M2_BATCH=16
-M3_BATCH=64
-M3_WORKERS=8
-M4_BATCH=128
-M4_WORKERS=16
-EOF
-
-chmod 600 "$REPO/server_hoang/server.env"
 ```
 
-Change `GPU_IDS`, batches, workers, repository path, and output disk to match
-the actual server. Do not add `KAGGLE_API_TOKEN` to `server.env`; the pipeline
-does not contact Kaggle after the downloads finish. `server.env` is a local
-machine configuration file and must not be committed to Git.
+Do not manually move the 252,287 feature files to imitate these sample paths;
+the downloader discovers the actual wrapper directories. The expected YOLO
+SHA-256 is
+`71d4b4e3b173cc046fc45c7120b6cf4489c384ceaaec9f08231182108a40da56`.
 
-Now run:
+`server.env` contains only paths and tuning values, never a Kaggle token. It is
+local server configuration and must not be committed. After the downloader
+prints `[DONE]`, the next commands are exactly:
 
 ```bash
-cd "$REPO"
 bash server_hoang/run_all.sh preflight
 bash server_hoang/run_all.sh start
 ```
 
-Large data may be copied directly into `server_hoang/input/` or symlinked from
-another server disk. The default layout is:
+The split between files is deliberate:
+
+- `download_kaggle.py`: network download, input validation, and `server.env`;
+- `run_all.sh`: detached process lifecycle, GPU assignment, stage ordering,
+  and resume orchestration only;
+- `pipeline_tools.py`: hashes, JSON state/contract files, shard validation and
+  merge, and provenance;
+- `collect_results.py`: the continuously refreshed CSV/Markdown/JSON result
+  tables.
+
+The generated `server.env` path layout is authoritative. Only if Kaggle cannot
+be used may data be copied/symlinked into this legacy fallback layout:
 
 ```text
 <repo>/
@@ -211,7 +151,11 @@ another server disk. The default layout is:
 │   └── m3_concept_space.json
 ├── server_hoang/
 │   ├── README.md
+│   ├── download_kaggle.py
 │   ├── run_all.sh
+│   ├── pipeline_tools.py
+│   ├── collect_results.py
+│   ├── server.env             # generated locally; do not commit
 │   └── input/
 │       ├── mimic-cxr-448/
 │       │   └── p10/p10000032/MIMIC_p10000032_....jpg
@@ -332,13 +276,13 @@ The server must be Linux with Bash, `nohup`, `setsid`, `flock`, NVIDIA drivers,
 and enough persistent disk for checkpoints, diagnostics, and M4 region caches.
 The local computer may disconnect, but the **server itself must remain on**.
 
-From the repository root:
+Reuse the `.venv` created in the required download step, then install the
+training dependencies from the repository root:
 
 ```bash
-python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install torch numpy scipy scikit-learn matplotlib pandas pillow pyyaml ultralytics
+pip install kagglehub torch numpy scipy scikit-learn matplotlib pandas pillow pyyaml ultralytics
 chmod +x server_hoang/run_all.sh
 ```
 
@@ -350,6 +294,10 @@ The full `phase_2/requirements.txt` also includes packages for the unrelated
 LLM scene-graph branch. They are not required for this M2→M3→M4 campaign.
 
 ## 3. Paths and tuning
+
+Normally no path exports or symlinks are needed: `download_kaggle.py` writes
+the absolute paths to `server_hoang/server.env`, and every supervisor command
+loads that file automatically. The defaults below are fallback behavior only.
 
 The default input and output roots are:
 
