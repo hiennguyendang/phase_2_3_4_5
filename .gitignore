@@ -15,3 +15,5 @@ run/
 *.log
 # Large Kaggle input bundle; upload manually as a Kaggle dataset, never commit it.
 kaggle_upload/
+.agents/
+.claude/
