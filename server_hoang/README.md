@@ -122,7 +122,8 @@ SHA-256 is
 
 `server.env` contains only paths and tuning values, never a Kaggle token. It is
 local server configuration and must not be committed. After the downloader
-prints `[DONE]`, the next commands are exactly:
+prints `[DONE]`, install the training dependencies in section 2 if they are not
+already present. The first Bash commands are then exactly:
 
 ```bash
 bash server_hoang/run_all.sh preflight
