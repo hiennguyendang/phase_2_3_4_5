@@ -171,10 +171,10 @@ distance, and stable-prediction rate. Accuracy is not the selection metric.
 
 ## 5. Detector-mask blocker
 
-The current dataset helper `_present_by_image()` always loads
-`present_mask.npy`. It does not accept `box_source`. Consequently a run marked
-`box_source=detector` uses detector boxes but still uses the GT region-presence
-mask for row validity and supervision.
+The 2026-07-28 audit found that `_present_by_image()` always loaded
+`present_mask.npy`. Consequently a run marked `box_source=detector` used
+detector boxes but the GT region-presence mask for row validity and
+supervision.
 
 This is a protocol mismatch. A GT-present/detector-missing region has an empty
 detector box; the pooling code deliberately lets an empty box attend the whole
@@ -191,10 +191,13 @@ Local audit on the current arrays:
 - validation valid cells under current GT mask: `80510`;
 - validation valid cells under detector mask: `79674`.
 
-Required repair: detector runs must use `present_mask_det.npy` for both current
-and prior; the GT oracle must use `present_mask.npy`. The box source must be
-passed through every internal, MS-CXR-T, inference, consistency, and calibration
-dataset path and recorded in every artifact.
+**Implemented 2026-08-03:** `_present_by_image(m3_labels_dir, box_source)` now
+selects `present_mask_det.npy` for detector runs and `present_mask.npy` for the
+GT oracle. `box_source` is passed through the region-cache, concept-cache,
+TempFuse, and MS-CXR-T dataset constructors; inference and consistency reuse
+those same constructors. This removes the detector-mask stop condition. The
+mixed-direction/report-calibration decisions below remain separate from M4
+training and benchmark evaluation.
 
 ## 6. Current output and regional aggregation
 

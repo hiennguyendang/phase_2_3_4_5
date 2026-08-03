@@ -4,10 +4,11 @@
 > complete first. The M4 cache and every M4 checkpoint must be tied to the new
 > M3 checkpoint hash and to `data/m3_labels/detector_provenance.json`.
 >
-> **Current stop condition (2026-07-28):** do not start the final campaign until
-> the detector-mask and temporal calibration blockers in
-> `m4_temporal_calibration_and_readout_policy.md` are repaired and the open
-> readout decisions are frozen.
+> **Implementation update (2026-08-03):** the detector-mask blocker is repaired:
+> detector runs use `present_mask_det.npy`, including MS-CXR-T, while the GT
+> oracle uses `present_mask.npy`. The training/grid/test campaign may run. Final
+> report-facing temporal calibration remains deferred until the readout policy
+> in `m4_temporal_calibration_and_readout_policy.md` is frozen.
 
 ## 1. Dependency and scope
 

@@ -130,8 +130,14 @@ class PatchStore:
         return self.load(next(iter(self.index))).shape[1]
 
 
-def _present_by_image(m3_labels_dir: Path) -> dict[str, np.ndarray]:
-    pm = np.load(Path(m3_labels_dir) / "present_mask.npy", mmap_mode="r")
+def _present_by_image(m3_labels_dir: Path, box_source: str = "gt") -> dict[str, np.ndarray]:
+    """Return the region-presence mask matching the requested box source.
+
+    Detector M4 rows must never be gated by the GT mask: doing so exposes
+    anatomical regions that the deployed detector did not produce.
+    """
+    fname = "present_mask_det.npy" if box_source == "detector" else "present_mask.npy"
+    pm = np.load(Path(m3_labels_dir) / fname, mmap_mode="r")
     out: dict[str, np.ndarray] = {}
     with open(Path(m3_labels_dir) / "manifest.jsonl", encoding="utf-8") as f:
         for i, line in enumerate(f):
@@ -199,14 +205,14 @@ class _M4Base(Dataset):
     Subclasses only implement _item_tensors(a, b) -> extra feature tensors for the (curr,prior) pair."""
 
     def __init__(self, m3_labels_dir, m4_labels_dir, pairs_path, split, augment,
-                 same_view_only, has_fn):
+                 same_view_only, has_fn, box_source="gt"):
         self.augment = augment
         self.same_view_only = same_view_only
         self.flip_map = torch.tensor(C.FLIP_CLASS_MAP, dtype=torch.int64)
         self.flip_exclude_idx = [C.CHEX_INDEX[n] for n in config.FLIP_EXCLUDE_DISEASES
                                  if n in C.CHEX_INDEX]
         self.prog = np.load(Path(m4_labels_dir) / "progression.npy", mmap_mode="r")
-        self.present = _present_by_image(m3_labels_dir)
+        self.present = _present_by_image(m3_labels_dir, box_source)
         prior = _prior_by_image(pairs_path)
         manifest = [json.loads(l) for l in open(Path(m4_labels_dir) / "manifest.jsonl", encoding="utf-8")]
         self.rows, self.skipped = _filter_rows(manifest, split, prior, self.present,
@@ -269,10 +275,11 @@ class M4Dataset(_M4Base):
     """regiondiff arch — serves frozen-M3 region features + disease logits from the region cache."""
 
     def __init__(self, region_cache, m3_labels_dir, m4_labels_dir, pairs_path,
-                 split: str | None = None, augment: bool = False, same_view_only: bool = False):
+                 split: str | None = None, augment: bool = False, same_view_only: bool = False,
+                 box_source: str = config.BOX_SOURCE):
         self.cache = region_cache if isinstance(region_cache, RegionCache) else RegionCache(region_cache)
         super().__init__(m3_labels_dir, m4_labels_dir, pairs_path, split, augment,
-                         same_view_only, self.cache.has)
+                         same_view_only, self.cache.has, box_source)
         self.feat_dim = self.cache.detect_dim()
 
     def _item_tensors(self, a: str, b: str) -> dict:
@@ -286,11 +293,12 @@ class M4ConceptDataset(_M4Base):
     """ftcb arch — serves M3 concept activations [29,69] (concept cache) + M3 disease logits (region cache)."""
 
     def __init__(self, concept_cache, region_cache, m3_labels_dir, m4_labels_dir, pairs_path,
-                 split: str | None = None, augment: bool = False, same_view_only: bool = False):
+                 split: str | None = None, augment: bool = False, same_view_only: bool = False,
+                 box_source: str = config.BOX_SOURCE):
         self.concepts = concept_cache if isinstance(concept_cache, ConceptCache) else ConceptCache(concept_cache)
         self.rcache = region_cache if isinstance(region_cache, RegionCache) else RegionCache(region_cache)
         super().__init__(m3_labels_dir, m4_labels_dir, pairs_path, split, augment,
-                         same_view_only, self._has)
+                         same_view_only, self._has, box_source)
         self.feat_dim = self.rcache.detect_dim()   # unused by FTCB; kept for build_model uniformity
 
     def _has(self, image_id: str) -> bool:
@@ -320,7 +328,7 @@ class M4PatchDataset(_M4Base):
             self.logit_cache = region_cache if isinstance(region_cache, RegionCache) else RegionCache(region_cache)
         self.boxes, self.box_row = _boxes_by_image(m3_labels_dir, box_source)
         super().__init__(m3_labels_dir, m4_labels_dir, pairs_path, split, augment,
-                         same_view_only, self._has)
+                         same_view_only, self._has, box_source)
         self.feat_dim = self.store.detect_dim()
 
     def _has(self, image_id: str) -> bool:
@@ -367,5 +375,6 @@ def make_dataset(arch, m3_labels_dir, m4_labels_dir, pairs, split, *, region_cac
                               tempfuse_input_mode)
     if arch == "ftcb":
         return M4ConceptDataset(concept_cache, region_cache, m3_labels_dir, m4_labels_dir, pairs,
-                                split, augment, same_view_only)
-    return M4Dataset(region_cache, m3_labels_dir, m4_labels_dir, pairs, split, augment, same_view_only)
+                                split, augment, same_view_only, box_source)
+    return M4Dataset(region_cache, m3_labels_dir, m4_labels_dir, pairs, split, augment,
+                     same_view_only, box_source)

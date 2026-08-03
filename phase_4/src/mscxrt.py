@@ -95,7 +95,7 @@ class MSCXRTDataset(Dataset):
                  tempfuse_input_mode: str = config.TEMPFUSE_INPUT_MODE):
         self.arch = arch
         self.tempfuse_input_mode = tempfuse_input_mode
-        self.present = _present_by_image(Path(m3_labels_dir))
+        self.present = _present_by_image(Path(m3_labels_dir), box_source)
         self.skipped = {
             "split": 0, "no_label": 0, "no_feat": 0, "no_present": 0, "no_box": 0,
         }
