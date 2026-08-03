@@ -21,6 +21,184 @@ Copy the **entire current repository**, including `.git` when possible, to one
 directory on the server. The source commit should contain this folder and the
 current `phase_2/`, `phase_3/`, and `phase_4/` directories.
 
+### What is already on Kaggle
+
+Yes: all **large input data required for M2, M3, and M4** is already present in
+three Kaggle datasets under the `nguynnghin` account:
+
+| Kaggle dataset ID | Already contains | Server destination/setting |
+|---|---|---|
+| `nguynnghin/vera-v2-inputs` | final YOLO `last.pt`; M3 base labels; M4 labels; MS-CXR-T CSV | `YOLO_WEIGHTS`, `M3_LABELS_INPUT`, `M4_LABELS`, `MS_CSV` |
+| `nguynnghin/frozen` | 252,287 frozen BioViL-T `.pt` files, normally `[197,512]` float16 | `FEATURE_ROOT` |
+| `nguynnghin/mimic-cxr-448` | resized MIMIC-CXR images used for detector inference | `IMAGE_ROOT` |
+
+The local source archive that produced `vera-v2-inputs` is
+`kaggle_upload/vera-v2-inputs.zip`. Its archive layout is:
+
+```text
+vera_v2/
+├── m2_detector/last.pt
+├── m3_labels_base/{manifest.jsonl,region_concepts.npy,...}
+└── m4_labels/{manifest.jsonl,progression.npy,m3_pairs.jsonl,
+               MS_CXR_T_temporal_image_classification_v1.0.0.csv}
+```
+
+The following Kaggle artifacts are **not inputs that Hoàng should reuse**:
+
+- `vera-v2-m2-detector-output`: old/already generated M2 output; the server
+  supervisor intentionally infers the final boxes once and creates fresh
+  provenance;
+- `vera-v2-code` or `kaggle_upload/vera-v2-code.zip`: it predates the current
+  `server_hoang` supervisor and the M4 detector-mask repair. Use the full current
+  Git repository instead;
+- `m5_optional/`: not needed for the requested M2→M3→M4 campaign.
+
+Therefore the only item not supplied by those three data datasets is the
+**current source code**. Copy the current repository or clone/pull `main`, then
+record the commit with `git rev-parse HEAD`. The pipeline also records it in
+`output/state/run_manifest.json`.
+
+### Download from Kaggle on the server
+
+Install the current official Kaggle CLI (its current documentation requests
+Python 3.11+):
+
+```bash
+python3 -m pip install --upgrade kaggle
+kaggle --version
+```
+
+Authenticate with **Hoàng's own Kaggle account**. If the three datasets are
+private, first grant that account access on Kaggle; do not send or commit the
+owner's personal token. The preferred interactive method is:
+
+```bash
+kaggle auth login
+```
+
+For a headless server, generate an API token from Kaggle **Settings → API** and
+enter it without echoing it into shell history:
+
+```bash
+read -rsp 'Kaggle API token: ' KAGGLE_API_TOKEN
+echo
+export KAGGLE_API_TOKEN
+```
+
+The official CLI also accepts a token stored at `~/.kaggle/access_token`. Keep
+that file mode `600`. Do not put any Kaggle token in this repository,
+`server.env`, logs, or the returned output archive.
+
+Reference: [official Kaggle CLI authentication documentation](https://github.com/Kaggle/kaggle-cli/blob/main/docs/README.md#authentication).
+
+Check access before starting the large downloads:
+
+```bash
+kaggle datasets files nguynnghin/vera-v2-inputs
+kaggle datasets files nguynnghin/frozen
+kaggle datasets files nguynnghin/mimic-cxr-448
+```
+
+Download and extract each dataset into a persistent data disk, not into `/tmp`.
+Reserve at least roughly 120--150 GB for the downloaded inputs, temporary ZIP
+space, two M4 region caches, checkpoints, and diagnostics:
+
+```bash
+export VERA_DATA=/data/vera/kaggle_downloads
+mkdir -p \
+  "$VERA_DATA/vera-v2-inputs" \
+  "$VERA_DATA/frozen" \
+  "$VERA_DATA/mimic-cxr-448"
+
+kaggle datasets download -d nguynnghin/vera-v2-inputs \
+  -p "$VERA_DATA/vera-v2-inputs" --unzip
+
+kaggle datasets download -d nguynnghin/frozen \
+  -p "$VERA_DATA/frozen" --unzip
+
+kaggle datasets download -d nguynnghin/mimic-cxr-448 \
+  -p "$VERA_DATA/mimic-cxr-448" --unzip
+```
+
+These datasets intentionally retain one wrapper directory. After extraction,
+the expected roots are:
+
+```text
+$VERA_DATA/vera-v2-inputs/vera_v2
+$VERA_DATA/frozen/frozen
+$VERA_DATA/mimic-cxr-448/mimic-cxr-448
+```
+
+Verify them before configuring the pipeline:
+
+```bash
+export BUNDLE_ROOT="$VERA_DATA/vera-v2-inputs/vera_v2"
+export FEATURE_TREE="$VERA_DATA/frozen/frozen"
+export IMAGE_TREE="$VERA_DATA/mimic-cxr-448/mimic-cxr-448"
+
+test -f "$BUNDLE_ROOT/m2_detector/last.pt"
+test -f "$BUNDLE_ROOT/m3_labels_base/manifest.jsonl"
+test -f "$BUNDLE_ROOT/m4_labels/progression.npy"
+test -f "$BUNDLE_ROOT/m4_labels/MS_CXR_T_temporal_image_classification_v1.0.0.csv"
+test -d "$FEATURE_TREE"
+test -d "$IMAGE_TREE"
+
+sha256sum "$BUNDLE_ROOT/m2_detector/last.pt"
+find "$FEATURE_TREE" -maxdepth 1 -type f \( -name '*.pt' -o -name '*.npy' \) | wc -l
+find "$IMAGE_TREE" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | wc -l
+du -sh "$VERA_DATA"/*
+```
+
+The YOLO hash must be:
+
+```text
+71d4b4e3b173cc046fc45c7120b6cf4489c384ceaaec9f08231182108a40da56
+```
+
+The feature count should be `252287`. If a wrapper path differs, locate it with
+`find "$VERA_DATA" -name manifest.jsonl -o -name last.pt`; do not move hundreds
+of thousands of feature files merely to imitate the example path.
+
+### Persist the server settings
+
+From the repository root, create `server_hoang/server.env`. The supervisor
+loads this file automatically for `preflight`, `start`, `status`, and `resume`:
+
+```bash
+export REPO=/path/to/phase_2_3_4_5
+
+cat > "$REPO/server_hoang/server.env" <<EOF
+IMAGE_ROOT=$IMAGE_TREE
+FEATURE_ROOT=$FEATURE_TREE
+YOLO_WEIGHTS=$BUNDLE_ROOT/m2_detector/last.pt
+M3_LABELS_INPUT=$BUNDLE_ROOT/m3_labels_base
+M4_LABELS=$BUNDLE_ROOT/m4_labels
+MS_CSV=$BUNDLE_ROOT/m4_labels/MS_CXR_T_temporal_image_classification_v1.0.0.csv
+OUTPUT_ROOT=/data/vera/output_server_hoang
+GPU_IDS=0,1
+M2_BATCH=16
+M3_BATCH=64
+M3_WORKERS=8
+M4_BATCH=128
+M4_WORKERS=16
+EOF
+
+chmod 600 "$REPO/server_hoang/server.env"
+```
+
+Change `GPU_IDS`, batches, workers, repository path, and output disk to match
+the actual server. Do not add `KAGGLE_API_TOKEN` to `server.env`; the pipeline
+does not contact Kaggle after the downloads finish. `server.env` is a local
+machine configuration file and must not be committed to Git.
+
+Now run:
+
+```bash
+cd "$REPO"
+bash server_hoang/run_all.sh preflight
+bash server_hoang/run_all.sh start
+```
+
 Large data may be copied directly into `server_hoang/input/` or symlinked from
 another server disk. The default layout is:
 

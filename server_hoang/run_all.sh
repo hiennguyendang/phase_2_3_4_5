@@ -8,6 +8,16 @@ export PYTHONUNBUFFERED=1
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
+# Optional persistent, non-secret server configuration. This is loaded before
+# defaults so start/status/resume in later SSH sessions resolve the same tree.
+SERVER_ENV="${SERVER_ENV:-$SCRIPT_DIR/server.env}"
+if [[ -f "$SERVER_ENV" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$SERVER_ENV"
+  set +a
+fi
+
 # All paths and tuning knobs may be overridden as environment variables.
 INPUT_ROOT="${INPUT_ROOT:-$SCRIPT_DIR/input}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$SCRIPT_DIR/output}"
