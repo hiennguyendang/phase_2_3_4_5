@@ -57,6 +57,16 @@ SUPERVISOR_LOG="${SUPERVISOR_LOG:-$DIAG_ROOT/logs/diag.supervisor.log}"
 # find existing checkpoints produced by run_all.sh.
 MAIN_RUNS_ROOT="${MAIN_RUNS_ROOT:-$OUTPUT_ROOT/runs}"
 MAIN_M3_DIAGDIR="${MAIN_M3_DIAGDIR:-$OUTPUT_ROOT/diagnostics/m3}"
+# State dir of the MAIN run_all.sh pipeline (used by the `after` command).
+MAIN_STATE_DIR="${MAIN_STATE_DIR:-$OUTPUT_ROOT/state}"
+# `after` command tuning: poll interval and GPU idle threshold.
+AFTER_POLL_SEC="${AFTER_POLL_SEC:-60}"      # seconds between polls
+AFTER_GPU_IDLE_PCT="${AFTER_GPU_IDLE_PCT:-15}"  # utilization % below which GPU is considered idle
+AFTER_GPU_IDLE_STRIKES="${AFTER_GPU_IDLE_STRIKES:-3}" # consecutive idle polls before starting
+AFTER_MODE="${AFTER_MODE:-auto}"            # auto | pipeline | gpu
+# auto    = wait for PIPELINE.SUCCESS/FAILED first, then fall back to GPU-idle
+# pipeline= only watch for run_all.sh SUCCESS/FAILED file
+# gpu     = only watch GPU utilization (useful when run_all.sh is not on same host)
 
 # ── tuning knobs ─────────────────────────────────────────────────────────────
 M3_EPOCHS="${M3_EPOCHS:-40}"
@@ -225,6 +235,8 @@ Commands:
   start       Preflight then launch detached (safe after SSH disconnect).
   resume      Alias for start; completed runs are skipped automatically.
   foreground  Run in the current terminal (debug mode).
+  after       Watch run_all.sh progress / GPU utilization, then auto-start
+              when GPUs are free. Safe to run detached with nohup.
   status      Show PID, run progress, and latest result table.
   logs        Follow the supervisor log (Ctrl-C stops tail only).
   collect     Refresh diag/results/diag_results.md now.
@@ -236,8 +248,13 @@ Options:
 
 Environment variables:
   INPUT_ROOT, OUTPUT_ROOT, DIAG_ROOT, GPU_IDS, M3_BATCH, M3_WORKERS,
-  MAIN_RUNS_ROOT   root of run_all.sh checkpoints (for eval-only g0 runs)
-  REMOTE_ROOT      optional rclone destination for checkpoint sync
+  MAIN_RUNS_ROOT      root of run_all.sh checkpoints (for eval-only g0 runs)
+  MAIN_STATE_DIR      state dir of run_all.sh (default: OUTPUT_ROOT/state)
+  REMOTE_ROOT         optional rclone destination for checkpoint sync
+  AFTER_POLL_SEC      seconds between polls in `after` mode (default: 60)
+  AFTER_GPU_IDLE_PCT  GPU utilization % threshold for "idle" (default: 15)
+  AFTER_GPU_IDLE_STRIKES  consecutive idle checks required (default: 3)
+  AFTER_MODE          auto|pipeline|gpu — what the `after` command watches
 
 Design:
   g0  Sanity eval of existing run_all.sh checkpoints  (no GPU training)
@@ -736,6 +753,124 @@ stop_worker() {
 }
 
 # ============================================================
+# `after` command — wait until GPUs are free, then auto-start
+# ============================================================
+#
+# Strategy (AFTER_MODE=auto):
+#   Phase 1 — watch run_all.sh pipeline state file.
+#     • PIPELINE.SUCCESS → run_all.sh finished cleanly; start immediately.
+#     • PIPELINE.FAILED  → run_all.sh crashed; prompt user, then start.
+#     • Neither file yet → pipeline still running; poll every AFTER_POLL_SEC.
+#   Phase 2 — if MAIN_STATE_DIR is unreachable (different host, etc.),
+#     fall back to GPU-utilization polling: wait for AFTER_GPU_IDLE_STRIKES
+#     consecutive readings below AFTER_GPU_IDLE_PCT on ALL GPUs.
+#
+# AFTER_MODE=pipeline — skip GPU check, only watch state file.
+# AFTER_MODE=gpu      — skip state file, only watch GPU utilization.
+
+_gpu_max_utilization() {
+  # Returns the maximum GPU utilization (%) across all GPUs, or 100 on error.
+  nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null \
+    | awk 'BEGIN{m=0} {v=$1+0; if(v>m) m=v} END{print m}' \
+    || echo 100
+}
+
+_pipeline_state() {
+  # Returns: success | failed | running | unknown
+  local sd="$MAIN_STATE_DIR"
+  if   [[ -s "$sd/PIPELINE.SUCCESS" ]]; then echo success
+  elif [[ -s "$sd/PIPELINE.FAILED"  ]]; then echo failed
+  elif [[ -s "$sd/worker.pid" ]] && kill -0 "$(cat "$sd/worker.pid")" 2>/dev/null; then echo running
+  elif [[ -s "$sd/current_stage" ]];   then echo running
+  else echo unknown; fi
+}
+
+wait_then_start() {
+  local scope="$1" single_run_arg="${2:-}"
+
+  say "[after] mode=$AFTER_MODE poll=${AFTER_POLL_SEC}s gpu_idle_pct=${AFTER_GPU_IDLE_PCT}% strikes=$AFTER_GPU_IDLE_STRIKES"
+  say "[after] MAIN_STATE_DIR=$MAIN_STATE_DIR"
+  say "[after] will start: bash server_hoang/run_diag.sh start --scope $scope $single_run_arg"
+
+  local idle_strikes=0
+  local check_num=0
+
+  while true; do
+    ((check_num++)) || true
+    local pstate="unknown"
+    local gpu_pct=100
+
+    # ── Phase 1: pipeline state file ──────────────────────────────────────
+    if [[ "$AFTER_MODE" != "gpu" ]]; then
+      pstate="$(_pipeline_state)"
+      case "$pstate" in
+        success)
+          say "[after] run_all.sh PIPELINE.SUCCESS detected — starting diagnostics now"
+          # shellcheck disable=SC2086
+          exec bash "$SCRIPT_DIR/run_diag.sh" start --scope "$scope" $single_run_arg
+          ;;
+        failed)
+          say "[after] WARNING: run_all.sh PIPELINE.FAILED detected"
+          cat "$MAIN_STATE_DIR/PIPELINE.FAILED" 2>/dev/null || true
+          say "[after] Starting diagnostics anyway (run_all.sh may have partially finished M3)"
+          # shellcheck disable=SC2086
+          exec bash "$SCRIPT_DIR/run_diag.sh" start --scope "$scope" $single_run_arg
+          ;;
+        running)
+          say "[after] check #$check_num — run_all.sh still running (stage: $(cat "$MAIN_STATE_DIR/current_stage" 2>/dev/null || echo unknown))"
+          ;;
+        unknown)
+          if [[ "$AFTER_MODE" == "pipeline" ]]; then
+            say "[after] check #$check_num — MAIN_STATE_DIR state unknown; retrying in ${AFTER_POLL_SEC}s"
+          fi
+          ;;
+      esac
+    fi
+
+    # ── Phase 2: GPU utilization fallback ────────────────────────────────
+    if [[ "$AFTER_MODE" == "gpu" ]] || [[ "$pstate" == "unknown" && "$AFTER_MODE" == "auto" ]]; then
+      gpu_pct="$(_gpu_max_utilization)"
+      if (( gpu_pct <= AFTER_GPU_IDLE_PCT )); then
+        ((idle_strikes++)) || true
+        say "[after] check #$check_num — GPU idle (max=${gpu_pct}%) — strike ${idle_strikes}/${AFTER_GPU_IDLE_STRIKES}"
+        if (( idle_strikes >= AFTER_GPU_IDLE_STRIKES )); then
+          say "[after] GPUs idle for $AFTER_GPU_IDLE_STRIKES consecutive checks — starting diagnostics"
+          # shellcheck disable=SC2086
+          exec bash "$SCRIPT_DIR/run_diag.sh" start --scope "$scope" $single_run_arg
+        fi
+      else
+        if (( idle_strikes > 0 )); then
+          say "[after] check #$check_num — GPU busy again (max=${gpu_pct}%) — resetting strike counter"
+        else
+          say "[after] check #$check_num — GPU busy (max=${gpu_pct}%) — waiting"
+        fi
+        idle_strikes=0
+      fi
+    fi
+
+    sleep "$AFTER_POLL_SEC"
+  done
+}
+
+start_after_detached() {
+  local scope="$1" single_run_arg="${2:-}"
+  mkdir -p "$DIAG_ROOT/logs" "$STATE_DIR"
+  local after_log="$DIAG_ROOT/logs/diag.after.log"
+  say "launching detached `after` watcher; log=$after_log"
+  say "  scope=$scope  mode=$AFTER_MODE  poll=${AFTER_POLL_SEC}s"
+  # Store PID of the `after` watcher so the user can check/kill it
+  nohup setsid bash "$SCRIPT_DIR/run_diag.sh" __after_worker \
+    --scope "$scope" $single_run_arg \
+    >>"$after_log" 2>&1 </dev/null &
+  local launcher_pid=$!
+  printf '%s\n' "$launcher_pid" >"$STATE_DIR/diag_after.launcher.pid"
+  sleep 1
+  say "after-watcher launcher PID=$launcher_pid; closing SSH is safe"
+  say "monitor with: bash server_hoang/run_diag.sh status"
+  say "         or : tail -f $after_log"
+}
+
+# ============================================================
 # Argument parsing
 # ============================================================
 
@@ -758,8 +893,11 @@ case "$COMMAND" in
   preflight)          preflight ;;
   start|resume)       start_detached ;;
   foreground)         preflight; run_diagnostics ;;
+  after)              start_after_detached "$DIAG_SCOPE" "$_SINGLE_RUN_ARG" ;;
+  __after_worker)     wait_then_start      "$DIAG_SCOPE" "$_SINGLE_RUN_ARG" ;;
   status)             resolve_python; show_status ;;
   logs)               touch "$SUPERVISOR_LOG"; tail -n 200 -F "$SUPERVISOR_LOG" ;;
+  after-logs)         local al="$DIAG_ROOT/logs/diag.after.log"; touch "$al"; tail -n 200 -F "$al" ;;
   collect)            resolve_python; collect_results ;;
   stop)               stop_worker ;;
   __worker)           run_diagnostics ;;
