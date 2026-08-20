@@ -84,182 +84,189 @@ collect_runs() {
   find "$RUNS_ROOT" -maxdepth 1 -type d -name "$pattern" \
     | sort \
     | while read -r d; do
-        [[ -f "$d/best.pt" ]] && echo "$d"
+        [[ -f "$d/best_change.pt" ]] && echo "$d"
       done
 }
 
 # ── out_json: path for a run's mscxrt result ──────────────────────────────────
 out_json() {
   local run_dir="$1"
+  local ckpt_type="${2:-change}"
   local name; name="$(basename "$run_dir")"
-  echo "$DIAGDIR/$name.mscxrt.json"
+  echo "$DIAGDIR/${name}_best_${ckpt_type}.mscxrt.json"
 }
 
 # ── eval one checkpoint ───────────────────────────────────────────────────────
 eval_one() {
   local run_dir="$1"
   local name; name="$(basename "$run_dir")"
-  local ckpt="$run_dir/best.pt"
-  local out="$(out_json "$run_dir")"
-  local log="$LOGDIR/$name.mscxrt.log"
 
-  if [[ -s "$out" ]]; then
-    say "[skip] $name — result already exists at $out"
-    return
-  fi
+  for ckpt_type in acc change prog; do
+    local ckpt="$run_dir/best_${ckpt_type}.pt"
+    local out="$(out_json "$run_dir" "$ckpt_type")"
+    local log="$LOGDIR/${name}_best_${ckpt_type}.mscxrt.log"
 
-  say "[eval] $name"
-  mkdir -p "$(dirname "$log")"
+    if [[ ! -f "$ckpt" ]]; then
+      say "[WARN] missing $ckpt"
+      continue
+    fi
 
-  # Choose region cache: detector or gt based on checkpoint box_source
-  local box_src
-  box_src="$("$PY" - "$ckpt" <<'PY'
+    if [[ -s "$out" ]]; then
+      say "[skip] $name ($ckpt_type) — result already exists at $out"
+      continue
+    fi
+
+    say "[eval] $name ($ckpt_type)"
+    mkdir -p "$(dirname "$log")"
+
+    # Choose region cache: detector or gt based on checkpoint box_source
+    local box_src
+    box_src="$("$PY" - "$ckpt" <<'PY'
 import sys, torch
 c = torch.load(sys.argv[1], map_location="cpu", weights_only=False)
 print(c.get("box_source", "detector"))
 PY
 )"
-  local region_cache
-  if [[ "$box_src" == "gt" ]]; then
-    region_cache="$CACHE_GT"
-  else
-    region_cache="$CACHE_DET"
-  fi
+    local region_cache
+    if [[ "$box_src" == "gt" ]]; then
+      region_cache="$CACHE_GT"
+    else
+      region_cache="$CACHE_DET"
+    fi
 
-  say "[eval] $name  box_source=$box_src  cache=$region_cache"
+    say "[eval] $name ($ckpt_type) box_source=$box_src  cache=$region_cache"
 
-  "$PY" phase_4/scripts/5-mscxrt_audit.py \
-    --ckpt "$ckpt" \
-    --csv  "$MS_CSV" \
-    --region-cache   "$region_cache" \
-    --features-root  "$FEATURE_ROOT" \
-    --m3-labels-dir  "$M3_LABELS_WORK" \
-    --split  "$SPLIT" \
-    --agg    "$AGG" \
-    --batch  "$BATCH" \
-    --workers "$WORKERS" \
-    --device "$DEVICE" \
-    --out-json "$out" \
-    2>&1 | tee "$log"
+    "$PY" phase_4/scripts/5-mscxrt_audit.py \
+      --ckpt "$ckpt" \
+      --csv  "$MS_CSV" \
+      --region-cache   "$region_cache" \
+      --features-root  "$FEATURE_ROOT" \
+      --m3-labels-dir  "$M3_LABELS_WORK" \
+      --split  "$SPLIT" \
+      --agg    "$AGG" \
+      --batch  "$BATCH" \
+      --workers "$WORKERS" \
+      --device "$DEVICE" \
+      --out-json "$out" \
+      2>&1 | tee "$log"
 
-  say "[done] $name → $out"
+    say "[done] $name ($ckpt_type) → $out"
+  done
 }
 
 # ── build summary table ───────────────────────────────────────────────────────
 build_summary() {
   resolve_python
   mkdir -p "$DIAGDIR"
-  "$PY" - "$DIAGDIR" "$RUN_PATTERN" <<'PY'
-import json, sys, re
+  "$PY" - "$DIAGDIR" <<'PY'
+import json, sys
 from pathlib import Path
 
-diagdir  = Path(sys.argv[1])
-pattern  = sys.argv[2]  # unused for filtering here; we scan all .mscxrt.json
+diagdir = Path(sys.argv[1])
 
-rows = []
-for jf in sorted(diagdir.glob("*.mscxrt.json")):
-    try:
-        d = json.loads(jf.read_text())
-    except Exception:
-        continue
-    name = jf.stem.replace(".mscxrt", "")
-    aggs = d.get("aggregations", {})
-    # prefer lse aggregation as the headline number; fall back to mean
-    for preferred in ("lse", "mean", "max"):
-        if preferred in aggs:
-            headline = aggs[preferred]
-            headline_agg = preferred
-            break
-    else:
-        continue
+for ckpt_type in ["acc", "change", "prog"]:
+    rows = []
+    for jf in sorted(diagdir.glob(f"*_best_{ckpt_type}.mscxrt.json")):
+        try:
+            d = json.loads(jf.read_text())
+        except Exception:
+            continue
+        name = jf.stem.replace(f"_best_{ckpt_type}.mscxrt", "")
+        aggs = d.get("aggregations", {})
+        for preferred in ("lse", "mean", "max"):
+            if preferred in aggs:
+                headline = aggs[preferred]
+                headline_agg = preferred
+                break
+        else:
+            continue
 
-    all_agg_str = "  ".join(
-        f"{a}: bal={v.get('avg_finding_balanced_accuracy', float('nan')):.4f}"
-        for a, v in aggs.items()
-    )
-
-    rows.append({
-        "run":           name,
-        "agg":           headline_agg,
-        "prog_f1":       headline.get("prog_f1_macro", float("nan")),
-        "change_f1":     headline.get("change_f1_macro", float("nan")),
-        "accuracy":      headline.get("accuracy", float("nan")),
-        "bal_accuracy":  headline.get("balanced_accuracy", float("nan")),
-        "avg_find_acc":  headline.get("avg_finding_accuracy", float("nan")),
-        "avg_find_bal":  headline.get("avg_finding_balanced_accuracy", float("nan")),
-        "n":             headline.get("n_valid", 0),
-        "all_aggs":      all_agg_str,
-        "per_finding":   aggs.get(headline_agg, {}).get("per_finding", {}),
-    })
-
-# Sort by avg_find_bal descending (the SOTA comparison metric)
-rows.sort(key=lambda r: r["avg_find_bal"], reverse=True)
-
-# ── header ────────────────────────────────────────────────────────────────────
-lines = [
-    "# MS-CXR-T Evaluation Summary",
-    "",
-    "> **Metric:** avg-finding balanced accuracy (= mean per-class recall averaged across",
-    "> findings) — this matches BioViL-T and CoCa-CXR reporting.",
-    "> BioViL-T baseline: **0.602** | CoCa-CXR fine-tune: **0.650**",
-    "",
-    "## Overall Table",
-    "",
-    "| Run | Agg | Prog F1 | Change F1 | Accuracy | Bal Acc | **Avg-Find Bal Acc** | n |",
-    "|---|---|---:|---:|---:|---:|---:|---:|",
-]
-for r in rows:
-    lines.append(
-        f"| `{r['run']}` | {r['agg']} "
-        f"| {r['prog_f1']:.4f} | {r['change_f1']:.4f} "
-        f"| {r['accuracy']:.4f} | {r['bal_accuracy']:.4f} "
-        f"| **{r['avg_find_bal']:.4f}** | {r['n']:,} |"
-    )
-
-# ── per-finding breakdown for top-3 runs ──────────────────────────────────────
-lines += ["", "## Per-Finding Detail (top 3 runs by avg-find-bal-acc)", ""]
-for r in rows[:3]:
-    lines.append(f"### {r['run']} (agg={r['agg']})")
-    lines.append("")
-    lines.append("| Finding | Acc | Bal Acc | Change F1 | n |")
-    lines.append("|---|---:|---:|---:|---:|")
-    for finding, fv in r["per_finding"].items():
-        lines.append(
-            f"| {finding} "
-            f"| {fv.get('accuracy', float('nan')):.4f} "
-            f"| {fv.get('balanced_accuracy', float('nan')):.4f} "
-            f"| {fv.get('change_f1', float('nan')):.4f} "
-            f"| {fv.get('n', 0):,} |"
+        all_agg_str = "  ".join(
+            f"{a}: bal={v.get('avg_finding_balanced_accuracy', float('nan')):.4f}"
+            for a, v in aggs.items()
         )
-    lines.append("")
 
-# ── all aggregations for top run ──────────────────────────────────────────────
-if rows:
-    top = rows[0]
-    jf = diagdir / f"{top['run']}.mscxrt.json"
-    try:
-        d = json.loads(jf.read_text())
-        lines += [f"## All Aggregations — Best Run ({top['run']})", ""]
-        lines.append("| Agg | Prog F1 | Change F1 | Accuracy | Bal Acc | Avg-Find Acc | Avg-Find Bal Acc |")
-        lines.append("|---|---:|---:|---:|---:|---:|---:|")
-        for a, v in d.get("aggregations", {}).items():
+        rows.append({
+            "run":           name,
+            "agg":           headline_agg,
+            "prog_f1":       headline.get("prog_f1_macro", float("nan")),
+            "change_f1":     headline.get("change_f1_macro", float("nan")),
+            "accuracy":      headline.get("accuracy", float("nan")),
+            "bal_accuracy":  headline.get("balanced_accuracy", float("nan")),
+            "avg_find_acc":  headline.get("avg_finding_accuracy", float("nan")),
+            "avg_find_bal":  headline.get("avg_finding_balanced_accuracy", float("nan")),
+            "n":             headline.get("n_valid", 0),
+            "all_aggs":      all_agg_str,
+            "per_finding":   aggs.get(headline_agg, {}).get("per_finding", {}),
+        })
+
+    if not rows:
+        continue
+
+    rows.sort(key=lambda r: r["avg_find_bal"], reverse=True)
+
+    lines = [
+        f"# MS-CXR-T Evaluation Summary (best_{ckpt_type}.pt)",
+        "",
+        "> **Metric:** avg-finding balanced accuracy (= mean per-class recall averaged across",
+        "> findings) — this matches BioViL-T and CoCa-CXR reporting.",
+        "> BioViL-T baseline: **0.602** | CoCa-CXR fine-tune: **0.650**",
+        "",
+        "## Overall Table",
+        "",
+        "| Run | Agg | Prog F1 | Change F1 | Accuracy | Bal Acc | **Avg-Find Bal Acc** | n |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| `{r['run']}` | {r['agg']} "
+            f"| {r['prog_f1']:.4f} | {r['change_f1']:.4f} "
+            f"| {r['accuracy']:.4f} | {r['bal_accuracy']:.4f} "
+            f"| **{r['avg_find_bal']:.4f}** | {r['n']:,} |"
+        )
+
+    lines += ["", "## Per-Finding Detail (top 3 runs by avg-find-bal-acc)", ""]
+    for r in rows[:3]:
+        lines.append(f"### {r['run']} (agg={r['agg']})")
+        lines.append("")
+        lines.append("| Finding | Acc | Bal Acc | Change F1 | n |")
+        lines.append("|---|---:|---:|---:|---:|")
+        for finding, fv in r["per_finding"].items():
             lines.append(
-                f"| {a} | {v.get('prog_f1_macro', float('nan')):.4f} "
-                f"| {v.get('change_f1_macro', float('nan')):.4f} "
-                f"| {v.get('accuracy', float('nan')):.4f} "
-                f"| {v.get('balanced_accuracy', float('nan')):.4f} "
-                f"| {v.get('avg_finding_accuracy', float('nan')):.4f} "
-                f"| {v.get('avg_finding_balanced_accuracy', float('nan')):.4f} |"
+                f"| {finding} "
+                f"| {fv.get('accuracy', float('nan')):.4f} "
+                f"| {fv.get('balanced_accuracy', float('nan')):.4f} "
+                f"| {fv.get('change_f1', float('nan')):.4f} "
+                f"| {fv.get('n', 0):,} |"
             )
-    except Exception:
-        pass
+        lines.append("")
 
-md = "\n".join(lines) + "\n"
-out = diagdir / "mscxrt_summary.md"
-out.write_text(md, encoding="utf-8")
-print(f"[summary] {len(rows)} runs → {out}")
-for r in rows:
-    print(f"  {r['run']:50s}  avg-find-bal={r['avg_find_bal']:.4f}  acc={r['accuracy']:.4f}")
+    if rows:
+        top = rows[0]
+        jf = diagdir / f"{top['run']}_best_{ckpt_type}.mscxrt.json"
+        try:
+            d = json.loads(jf.read_text())
+            lines += [f"## All Aggregations — Best Run ({top['run']})", ""]
+            lines.append("| Agg | Prog F1 | Change F1 | Accuracy | Bal Acc | Avg-Find Acc | Avg-Find Bal Acc |")
+            lines.append("|---|---:|---:|---:|---:|---:|---:|")
+            for a, v in d.get("aggregations", {}).items():
+                lines.append(
+                    f"| {a} | {v.get('prog_f1_macro', float('nan')):.4f} "
+                    f"| {v.get('change_f1_macro', float('nan')):.4f} "
+                    f"| {v.get('accuracy', float('nan')):.4f} "
+                    f"| {v.get('balanced_accuracy', float('nan')):.4f} "
+                    f"| {v.get('avg_finding_accuracy', float('nan')):.4f} "
+                    f"| {v.get('avg_finding_balanced_accuracy', float('nan')):.4f} |"
+                )
+        except Exception:
+            pass
+
+    md = "\n".join(lines) + "\n"
+    out = diagdir / f"mscxrt_summary_best_{ckpt_type}.md"
+    out.write_text(md, encoding="utf-8")
+    print(f"[summary] {ckpt_type}: {len(rows)} runs → {out}")
+    for r in rows:
+        print(f"  {r['run']:50s}  avg-find-bal={r['avg_find_bal']:.4f}  acc={r['accuracy']:.4f}")
 PY
 }
 
@@ -287,9 +294,10 @@ run_all_evals() {
 
   say "found ${#runs[@]} run(s):"
   for d in "${runs[@]}"; do
-    local out; out="$(out_json "$d")"
     local mark="pending"
-    [[ -s "$out" ]] && mark="done"
+    if [[ -s "$(out_json "$d" acc)" && -s "$(out_json "$d" change)" && -s "$(out_json "$d" prog)" ]]; then
+      mark="done"
+    fi
     printf '  [%-7s] %s\n' "$mark" "$(basename "$d")"
   done
 
@@ -301,7 +309,9 @@ run_all_evals() {
   say "building summary table"
   build_summary
   echo ""
-  cat "$DIAGDIR/mscxrt_summary.md" 2>/dev/null || true
+  for ckpt_type in acc change prog; do
+    cat "$DIAGDIR/mscxrt_summary_best_${ckpt_type}.md" 2>/dev/null || true
+  done
 
   ((failed == 0)) || say "WARNING: one or more runs failed; check logs in $LOGDIR"
   say "MS-CXR-T sweep complete"
@@ -337,8 +347,7 @@ show_status() {
   mapfile -t runs < <(collect_runs "$RUN_PATTERN" 2>/dev/null || true)
   local done_count=0
   for d in "${runs[@]}"; do
-    local out; out="$(out_json "$d")"
-    if [[ -s "$out" ]]; then
+    if [[ -s "$(out_json "$d" acc)" && -s "$(out_json "$d" change)" && -s "$(out_json "$d" prog)" ]]; then
       printf '  [DONE]   %s\n' "$(basename "$d")"; ((done_count++))
     else
       printf '  [pending] %s\n' "$(basename "$d")"
@@ -346,10 +355,12 @@ show_status() {
   done
   printf '\n%d / %d runs complete\n' "$done_count" "${#runs[@]}"
 
-  if [[ -s "$DIAGDIR/mscxrt_summary.md" ]]; then
-    echo ""; echo "--- latest results ---"
-    cat "$DIAGDIR/mscxrt_summary.md"
-  fi
+  for ckpt_type in acc change prog; do
+    if [[ -s "$DIAGDIR/mscxrt_summary_best_${ckpt_type}.md" ]]; then
+      echo ""; echo "--- latest results (best_${ckpt_type}.pt) ---"
+      cat "$DIAGDIR/mscxrt_summary_best_${ckpt_type}.md"
+    fi
+  done
 }
 
 # ── argument parsing ──────────────────────────────────────────────────────────
@@ -399,8 +410,8 @@ Options:
   --batch N        batch size (default: 64)
 
 Results:
-  Each run: DIAGDIR/<run>.mscxrt.json
-  Summary:  DIAGDIR/mscxrt_summary.md
+  Each run: DIAGDIR/<run>_best_{acc,change,prog}.mscxrt.json
+  Summary:  DIAGDIR/mscxrt_summary_best_{acc,change,prog}.md
 
 Key metric: avg_finding_balanced_accuracy
   BioViL-T baseline:  0.602
