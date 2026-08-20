@@ -382,7 +382,7 @@ case "$COMMAND" in
   start)            start_detached ;;
   status)           show_status ;;
   logs)             touch "$SUPERVISOR_LOG"; tail -n 200 -F "$SUPERVISOR_LOG" ;;
-  summary)          resolve_python; build_summary; cat "$DIAGDIR/mscxrt_summary.md" ;;
+  summary)          resolve_python; build_summary; for c in acc change prog; do cat "$DIAGDIR/mscxrt_summary_best_${c}.md" 2>/dev/null || true; done ;;
   __worker)
     mkdir -p "$STATE_DIR"
     echo "$$" >"$STATE_DIR/mscxrt.pid.tmp"
