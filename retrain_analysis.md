@@ -258,14 +258,44 @@ M4 opposite rate:   0.1512               0.0980 (smooth005+dist050)
 
 ---
 
-## PHẦN VII — Việc Còn Lại (Chưa Xong)
+## PHẦN VII — Chiến Dịch Chẩn Đoán M3 (`run_diag.sh`)
+
+Sự sụt giảm AUC từ bản cũ (0.829) xuống VERA v2 (0.799) đã đặt ra câu hỏi: Lỗi do đâu? Có phải do dữ liệu mới, hay do một thiết kế kiến trúc cụ thể nào đó gây hại quá mức? 
+
+Để trả lời **không cần đoán mò**, một chiến dịch chẩn đoán diện rộng (`run_diag.sh`) gồm **21 runs** đã được thiết lập.
+
+### 7.1 Cấu Trúc Diagnostic Matrix (21 Runs)
+
+Tổng cộng có **15 runs training mới** và **6 runs eval-only** (tái sử dụng checkpoint có sẵn), chia thành 5 nhóm (G0-G4):
+
+| Nhóm | Số Run | Mục Đích Cốt Lõi |
+|---|---|---|
+| **G0** (Sanity) | 3 eval-only | Chạy lại eval trên các checkpoint đã xong từ `run_all.sh` để đảm bảo code eval của diag khớp 100% với số cũ. |
+| **G1** (Env Validation) | 1 train | Train lại cấu hình cũ (có global head, attention, no-derive) trên môi trường và data mới. **Nếu AUC vẫn ~0.829**, thì dữ liệu/môi trường vô tội. Lỗi do kiến trúc. |
+| **G2** (Factorial 2^3) | 8 train | Ma trận kết hợp 3 biến: Global Head (ON/OFF) × Derive No-Finding (ON/OFF) × Aggregation (Attention/LSE). Giúp cô lập **chính xác** thay đổi nào (hoặc cặp thay đổi nào) gây tụt AUC mạnh nhất. |
+| **G3** (Relaxation) | 3 train, 2 eval | Thử nới lỏng đúng một ràng buộc của v2 (vd: trả lại global head, hoặc tắt derive) để xem AUC bật lại bao nhiêu. Có 2 run dùng nhãn Ground Truth box (oracle) làm trần trên. |
+| **G4** (Concept Sensitivity)| 3 train, 1 eval | Chuyển disease head từ `faithful` (bị ép 47 cạnh graph) sang `mlp` hoặc `nonneg` tự do. Mục đích: xác định xem bản thân cái graph-masked head có phải là thủ phạm bóp nghẹt accuracy hay không. |
+
+### 7.2 Tại Sao Phải Chạy Ma Trận Này? (Rationale)
+
+Các thay đổi của VERA v2 vốn dĩ là **để đảm bảo Faithfulness 100%**, nhưng ta cần biết "giá phải trả" của mỗi thay đổi là bao nhiêu:
+1. **Global Head (G):** Bỏ nó đi là *bắt buộc* để tránh việc model đi "đường tắt". Mode A (direct) luôn cao hơn Mode B (faithful bottleneck) khi không có global head.
+2. **Derive No-Finding (D):** Ép model tính No Finding gián tiếp từ 13 bệnh kia. Đây là thay đổi đúng về mặt y khoa, nhưng có thể gây gradient mâu thuẫn. Nhóm G2 sẽ chỉ ra nếu biến này làm tụt AUC quá lố.
+3. **Aggregation (A):** Chuyển từ Learned Attention sang Deterministic LSE. Attention có thể đang học cách "gian lận" (chỉ nhìn các vùng dễ đoán) trong khi LSE trung thực hơn.
+4. **Faithful Head:** Bị giới hạn bởi 47 cạnh (so với fully connected MLP). Nhóm G4 sẽ so sánh độ tụt của MLP vs Faithful.
+
+> [!TIP]
+> Chiến dịch này giúp bài báo sau này cực kỳ thuyết phục. Thay vì giấu đi sự sụt giảm AUC, ta trình bày nó như một **Faithfulness-Accuracy Tradeoff** được đo đạc cẩn thận. Ta "chọn" VERA v2 (AUC thấp hơn) vì tính minh bạch tuyệt đối (structural guarantee), và chứng minh được bằng thực nghiệm (ablation G2) rằng các cấu hình có AUC cao hơn đều vi phạm tính minh bạch.
+
+---
+
+## PHẦN VIII — Việc Còn Lại (Chưa Xong)
 
 | Hạng mục | Trạng thái |
 |---|---|
-| Full test diagnostics M3 v2 trên Kaggle | ❌ Chưa chạy (pending) |
-| M4 coefficient grid (9 runs: KL×Distance) | ❌ Chưa chạy |
-| M4 paper ablation matrix (19 runs) | ❌ Chưa chạy |
-| MS-CXR-T final external audit | Partial |
+| M3 Diagnostics matrix (`run_diag.sh`) | ⏳ Đang chạy ngầm |
+| M4 paper ablation matrix (19 runs) | ⏳ Đang chạy ngầm |
+| MS-CXR-T external audit trên 3 checkpoints | ❌ Chờ M4 xong để chạy sweep |
 | M5 real report audit từ m3/m4 pred JSONL | ❌ Chưa chạy |
 | Reader study | ❌ Planned |
 | CheXplus/NIH ablation | ❌ Planned |
